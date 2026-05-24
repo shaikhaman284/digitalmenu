@@ -113,7 +113,7 @@ export default function DashboardHomePage() {
           </div>
 
           {/* Quick stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div className="db-stats-grid">
             {[
               { label: 'Menu Items',    value: menuItems.length, icon: UtensilsCrossed, color: '#c8622a', bg: '#fff3ec' },
               { label: 'Total Likes',   value: totalLikes,       icon: Heart,           color: '#dc2626', bg: '#fff0f0' },
@@ -130,7 +130,7 @@ export default function DashboardHomePage() {
           </div>
 
           {/* Top lists */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div className="db-two-col">
             {/* Most liked */}
             <div className="db-card" style={{ padding: 20 }}>
               <h2 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>

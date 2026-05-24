@@ -1,223 +1,335 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Zap, QrCode, Wand2, Heart, BarChart3, MessageCircle, Check, ArrowRight } from 'lucide-react';
+import {
+  QrCode, Wand2, Heart, BarChart3, MessageCircle,
+  Check, ArrowRight, Star, Zap, ChevronRight,
+} from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'MenuQR — Modern Digital Menus for Restaurants & Cafes',
   description:
-    'MenuQR lets restaurants display beautiful digital menus via QR codes. AI-powered menu setup, customer likes & reviews. No app download needed.',
+    'Replace paper menus with a beautiful QR-based digital experience. AI-powered setup, customer likes & reviews, real-time updates. No app needed.',
 };
 
 const features = [
   {
     icon: QrCode,
-    title: 'QR-Based Access',
-    description: 'Customers scan your QR sticker and instantly see your full digital menu — no app download, no login.',
-    gradient: 'from-purple-500 to-fuchsia-500',
+    title: 'Instant QR Access',
+    description: 'Customers scan your table QR and your full menu appears instantly — no app download, no account, no friction.',
+    accent: '#c8622a',
+    bg: '#fff3ec',
   },
   {
     icon: Wand2,
     title: 'AI Menu Setup',
-    description: 'Upload a photo of your old paper menu and our AI extracts every item automatically with descriptions.',
-    gradient: 'from-blue-500 to-purple-500',
+    description: 'Upload a photo of your old paper menu and our AI extracts every dish, price and description automatically.',
+    accent: '#7c3aed',
+    bg: '#f5f3ff',
   },
   {
     icon: Heart,
     title: 'Customer Likes',
-    description: 'Customers can like their favourite dishes. See which items are most popular at a glance.',
-    gradient: 'from-pink-500 to-red-500',
+    description: 'Diners can like their favourite dishes. See which items are most popular at a glance on your dashboard.',
+    accent: '#dc2626',
+    bg: '#fff0f0',
   },
   {
     icon: MessageCircle,
-    title: 'Reviews & Ratings',
-    description: 'Customers leave star ratings and written reviews directly on your menu page.',
-    gradient: 'from-amber-500 to-orange-500',
+    title: 'Ratings & Reviews',
+    description: 'Customers leave star ratings and written reviews right on the menu page — no third-party app required.',
+    accent: '#d97706',
+    bg: '#fffbeb',
   },
   {
     icon: BarChart3,
-    title: 'Analytics Dashboard',
-    description: 'Track total likes, reviews, and your best-performing dishes — all in one clean dashboard.',
-    gradient: 'from-emerald-500 to-teal-500',
+    title: 'Live Analytics',
+    description: 'Track total likes, average ratings, top dishes and recent reviews — all in one clean dashboard.',
+    accent: '#16a34a',
+    bg: '#f0fdf4',
   },
   {
     icon: Zap,
-    title: 'Instant Updates',
-    description: 'Add, edit, or remove items from your menu in seconds. Changes go live immediately.',
-    gradient: 'from-yellow-500 to-amber-500',
+    title: 'Real-Time Updates',
+    description: 'Edit prices, add new items or mark dishes unavailable in seconds. Changes go live the moment you save.',
+    accent: '#0284c7',
+    bg: '#eff6ff',
+  },
+];
+
+const steps = [
+  { num: '01', title: 'We set up your account', body: 'Contact us on WhatsApp. We create your restaurant profile and generate a unique QR code for your table(s).' },
+  { num: '02', title: 'Upload your menu', body: 'Use our AI importer — snap a photo of your existing menu and all items are extracted automatically. Or add them manually.' },
+  { num: '03', title: 'Place the QR sticker', body: 'Stick the printed QR on your table. Customers scan it and see your live digital menu instantly.' },
+  { num: '04', title: 'Grow with insights', body: 'Watch likes and reviews roll in. Use your dashboard analytics to understand what your customers love most.' },
+];
+
+const testimonials = [
+  {
+    quote: 'Our customers absolutely love scanning the QR and browsing the menu on their phone. Setup took less than a day.',
+    name: 'Rahul Sharma',
+    role: 'Owner, The Spice Garden',
+    rating: 5,
+  },
+  {
+    quote: 'The AI menu importer saved me hours. I uploaded a photo of our old menu and everything was ready in minutes.',
+    name: 'Priya Nair',
+    role: 'Manager, Coastal Bites',
+    rating: 5,
+  },
+  {
+    quote: 'Seeing which dishes get the most likes has helped us understand what our guests actually enjoy. Brilliant feature.',
+    name: 'Mohammed Farhan',
+    role: 'Chef-Owner, Urban Dhabha',
+    rating: 5,
   },
 ];
 
 const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP || '919876543210';
+const waLink = (msg: string) =>
+  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(msg)}`;
 
-export default function HomePage() {
+export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#0f0a1e] text-white">
-      {/* Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-purple-900/20">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl gradient-brand flex items-center justify-center glow-brand">
-              <Zap size={16} className="text-white" />
-            </div>
-            <span className="font-bold text-white text-lg">MenuQR</span>
+    <div className="lp-root">
+
+      {/* ── Nav ────────────────────────────────────────────────── */}
+      <header className="lp-nav">
+        <div className="lp-container lp-nav-inner">
+          <div className="lp-logo">
+            <div className="lp-logo-icon">🍽️</div>
+            <span className="lp-logo-text">MenuQR</span>
           </div>
+          <nav className="lp-nav-links">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#testimonials">Reviews</a>
+          </nav>
           <a
-            href={`https://wa.me/${whatsappNumber}?text=Hi!%20I'm%20interested%20in%20MenuQR%20for%20my%20restaurant.`}
+            href={waLink("Hi! I'm interested in MenuQR for my restaurant.")}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl gradient-brand text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-lg shadow-purple-900/40"
+            className="lp-btn lp-btn-primary lp-btn-sm"
           >
-            <MessageCircle size={16} />
-            Contact Us
+            <MessageCircle size={15} /> Contact Us
           </a>
         </div>
-      </nav>
+      </header>
 
-      {/* Hero */}
-      <div className="relative overflow-hidden pt-16">
-        {/* Background decorations */}
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-20 -left-60 w-96 h-96 bg-fuchsia-600/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-20 -right-60 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative max-w-4xl mx-auto px-4 pt-24 pb-20 text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-purple-700/50 bg-purple-900/20 text-purple-300 text-sm font-medium mb-8">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Now available for restaurants & cafes
+      {/* ── Hero ───────────────────────────────────────────────── */}
+      <section className="lp-hero">
+        <div className="lp-hero-bg-blob lp-hero-bg-blob-1" />
+        <div className="lp-hero-bg-blob lp-hero-bg-blob-2" />
+        <div className="lp-container lp-hero-inner">
+          <div className="lp-hero-badge">
+            <span className="lp-badge-dot" />
+            Now live for restaurants &amp; cafés across India
           </div>
 
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-tight mb-6">
-            <span className="text-gradient-brand">Modern Digital</span>
-            <br />
-            <span className="text-white">Menus for</span>
-            <br />
-            <span className="text-white">Restaurants & Cafes</span>
+          <h1 className="lp-hero-h1">
+            Your restaurant menu,<br />
+            <span className="lp-accent-text">beautifully digital.</span>
           </h1>
 
-          <p className="text-xl text-purple-300 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Replace your paper menus with a stunning digital experience. Customers scan your QR — that's it. No app, no download, no friction.
+          <p className="lp-hero-sub">
+            Replace paper menus with a stunning QR experience.
+            Customers scan, browse and engage — no app, no download, no friction.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <div className="lp-hero-ctas">
             <a
-              href={`https://wa.me/${whatsappNumber}?text=Hi!%20I'm%20interested%20in%20MenuQR%20for%20my%20restaurant.%20Please%20tell%20me%20more.`}
+              href={waLink("Hi! I'm interested in MenuQR for my restaurant. Please tell me more.")}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 px-8 py-4 rounded-2xl gradient-brand text-white text-base font-semibold hover:opacity-90 transition-all shadow-2xl shadow-purple-900/50 glow-brand"
+              className="lp-btn lp-btn-primary lp-btn-lg"
             >
               <MessageCircle size={20} />
-              Contact us on WhatsApp
+              Get Started on WhatsApp
               <ArrowRight size={18} />
             </a>
+            <a href="#features" className="lp-btn lp-btn-ghost lp-btn-lg">
+              See features <ChevronRight size={16} />
+            </a>
+          </div>
+
+          {/* Trust bar */}
+          <div className="lp-trust-bar">
+            {['No app required', 'AI-powered setup', 'Live in minutes', 'Real customer insights'].map((t) => (
+              <span key={t} className="lp-trust-pill">
+                <Check size={13} /> {t}
+              </span>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* Demo Preview */}
-      <div className="max-w-sm mx-auto px-4 mb-24">
-        <div className="glass rounded-3xl overflow-hidden shadow-2xl shadow-purple-900/40 border border-purple-700/20">
-          {/* Phone chrome */}
-          <div className="bg-[#1a1030] px-4 py-3 border-b border-purple-900/30">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500/60" />
-              <div className="w-2 h-2 rounded-full bg-amber-500/60" />
-              <div className="w-2 h-2 rounded-full bg-emerald-500/60" />
-              <div className="flex-1 h-5 rounded-lg bg-white/5 mx-2" />
+        {/* ── Phone Mockup ───────────────────────────────────── */}
+        <div className="lp-container lp-mockup-wrap">
+          <div className="lp-phone-frame">
+            {/* Status bar */}
+            <div className="lp-phone-bar">
+              <div className="lp-phone-dots">
+                <span /><span /><span />
+              </div>
+              <div className="lp-phone-url" />
             </div>
-          </div>
-          {/* Menu preview mockup */}
-          <div className="p-4 space-y-3">
-            <div className="flex flex-col items-center py-4">
-              <div className="w-16 h-16 rounded-full gradient-brand flex items-center justify-center text-2xl mb-2 glow-brand">🍽️</div>
-              <p className="text-white font-bold">The Spice Garden</p>
-              <p className="text-purple-400 text-xs">📍 Hyderabad, Telangana</p>
-            </div>
-            <div className="gradient-fire p-px rounded-xl">
-              <div className="bg-[#1a0a2e] rounded-xl p-3">
-                <p className="text-orange-400 text-xs font-bold mb-1">🔥 Most Loved</p>
-                <p className="text-white font-semibold">Chicken Biryani</p>
-                <div className="flex justify-between mt-1">
-                  <span className="text-purple-300 text-sm">₹280</span>
-                  <span className="text-red-400 text-xs">❤️ 142</span>
+            {/* Menu preview */}
+            <div className="lp-phone-body">
+              <div className="lp-mock-hero">
+                <div className="lp-mock-logo">🍽️</div>
+                <p className="lp-mock-name">The Spice Garden</p>
+                <p className="lp-mock-loc">📍 Hyderabad, Telangana</p>
+              </div>
+              <div className="lp-mock-hot">
+                <span className="lp-mock-hot-badge">🔥 Most Loved</span>
+                <p className="lp-mock-dish">Chicken Biryani</p>
+                <div className="lp-mock-row">
+                  <span className="lp-mock-price">₹280</span>
+                  <span className="lp-mock-likes">❤️ 142</span>
                 </div>
               </div>
+              {[
+                { name: 'Paneer Tikka', price: '₹220', emoji: '🧀', rating: 4.5 },
+                { name: 'Dal Makhani', price: '₹160', emoji: '🥘', rating: 4.2 },
+              ].map((item) => (
+                <div key={item.name} className="lp-mock-item">
+                  <span className="lp-mock-emoji">{item.emoji}</span>
+                  <div className="lp-mock-item-info">
+                    <p className="lp-mock-item-name">{item.name}</p>
+                    <p className="lp-mock-item-rating">⭐ {item.rating}</p>
+                  </div>
+                  <p className="lp-mock-item-price">{item.price}</p>
+                </div>
+              ))}
             </div>
-            {[
-              { name: 'Paneer Tikka', price: '₹220', emoji: '🧀', likes: 89, rating: 4.5 },
-              { name: 'Dal Makhani', price: '₹160', emoji: '🥘', likes: 64, rating: 4.2 },
-            ].map((item) => (
-              <div key={item.name} className="flex gap-3 p-3 glass-light rounded-xl">
-                <div className="w-12 h-12 rounded-lg bg-purple-900/40 flex items-center justify-center text-xl shrink-0">
-                  {item.emoji}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Features ───────────────────────────────────────────── */}
+      <section id="features" className="lp-section lp-section-alt">
+        <div className="lp-container">
+          <div className="lp-section-head">
+            <p className="lp-eyebrow">Features</p>
+            <h2 className="lp-section-h2">Everything your restaurant needs</h2>
+            <p className="lp-section-sub">One platform to manage your digital presence, engage customers and grow your business.</p>
+          </div>
+
+          <div className="lp-features-grid">
+            {features.map(({ icon: Icon, title, description, accent, bg }) => (
+              <div key={title} className="lp-feature-card">
+                <div className="lp-feature-icon" style={{ background: bg, color: accent }}>
+                  <Icon size={22} />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium">{item.name}</p>
-                  <p className="text-purple-400 text-xs">⭐ {item.rating}</p>
+                <h3 className="lp-feature-title">{title}</h3>
+                <p className="lp-feature-desc">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── How it works ───────────────────────────────────────── */}
+      <section id="how-it-works" className="lp-section">
+        <div className="lp-container">
+          <div className="lp-section-head">
+            <p className="lp-eyebrow">Process</p>
+            <h2 className="lp-section-h2">Up and running in minutes</h2>
+            <p className="lp-section-sub">No technical knowledge required. We handle the hard parts.</p>
+          </div>
+
+          <div className="lp-steps-grid">
+            {steps.map(({ num, title, body }) => (
+              <div key={num} className="lp-step-card">
+                <span className="lp-step-num">{num}</span>
+                <h3 className="lp-step-title">{title}</h3>
+                <p className="lp-step-body">{body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Testimonials ───────────────────────────────────────── */}
+      <section id="testimonials" className="lp-section lp-section-alt">
+        <div className="lp-container">
+          <div className="lp-section-head">
+            <p className="lp-eyebrow">Testimonials</p>
+            <h2 className="lp-section-h2">Loved by restaurant owners</h2>
+          </div>
+
+          <div className="lp-testimonials-grid">
+            {testimonials.map(({ quote, name, role, rating }) => (
+              <div key={name} className="lp-testi-card">
+                <div className="lp-stars">
+                  {Array.from({ length: rating }).map((_, i) => (
+                    <Star key={i} size={15} fill="#d97706" color="#d97706" />
+                  ))}
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-purple-300 text-sm font-bold">{item.price}</p>
-                  <p className="text-pink-400 text-xs">❤️ {item.likes}</p>
+                <p className="lp-testi-quote">&ldquo;{quote}&rdquo;</p>
+                <div className="lp-testi-author">
+                  <div className="lp-testi-avatar">
+                    {name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="lp-testi-name">{name}</p>
+                    <p className="lp-testi-role">{role}</p>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Features */}
-      <div className="max-w-5xl mx-auto px-4 pb-24">
-        <div className="text-center mb-14">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">
-            Everything you need
-          </h2>
-          <p className="text-purple-400 text-lg">All-in-one solution for your restaurant's digital presence</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {features.map(({ icon: Icon, title, description, gradient }) => (
-            <div key={title} className="glass rounded-2xl p-5 card-hover group">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                <Icon size={22} className="text-white" />
-              </div>
-              <h3 className="text-white font-semibold text-lg mb-2">{title}</h3>
-              <p className="text-purple-400 text-sm leading-relaxed">{description}</p>
+      {/* ── CTA ────────────────────────────────────────────────── */}
+      <section className="lp-section lp-cta-section">
+        <div className="lp-container">
+          <div className="lp-cta-card">
+            <div className="lp-cta-icon">🚀</div>
+            <h2 className="lp-cta-h2">Ready to go digital?</h2>
+            <p className="lp-cta-sub">
+              Get in touch with us on WhatsApp and we&apos;ll have your digital menu live today.
+              No contracts, no hidden fees.
+            </p>
+            <a
+              href={waLink("Hi! I'd like to set up a digital menu for my restaurant with MenuQR.")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="lp-btn lp-btn-primary lp-btn-lg"
+            >
+              <MessageCircle size={20} />
+              Get Started on WhatsApp
+              <ArrowRight size={18} />
+            </a>
+            <div className="lp-cta-checks">
+              {['Free consultation', 'Same-day setup', 'Ongoing support'].map((t) => (
+                <span key={t} className="lp-cta-check">
+                  <Check size={13} /> {t}
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      <div className="max-w-2xl mx-auto px-4 pb-24 text-center">
-        <div className="glass rounded-3xl p-10 border border-purple-700/20">
-          <div className="w-16 h-16 rounded-2xl gradient-brand flex items-center justify-center mx-auto mb-6 glow-brand">
-            <Zap size={30} className="text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-white mb-3">Ready to go digital?</h2>
-          <p className="text-purple-300 mb-8 leading-relaxed">
-            Get in touch with us on WhatsApp and we'll have your digital menu up and running in no time.
-          </p>
-          <a
-            href={`https://wa.me/${whatsappNumber}?text=Hi!%20I'd%20like%20to%20set%20up%20a%20digital%20menu%20for%20my%20restaurant%20with%20MenuQR.`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl gradient-brand text-white text-base font-semibold hover:opacity-90 transition-all shadow-2xl shadow-purple-900/50 glow-brand"
-          >
-            <MessageCircle size={20} />
-            Get Started on WhatsApp
-          </a>
         </div>
-      </div>
+      </section>
 
-      {/* Footer */}
-      <footer className="border-t border-purple-900/30 py-8 px-4 text-center">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <div className="w-6 h-6 rounded-lg gradient-brand flex items-center justify-center">
-            <Zap size={12} className="text-white" />
+      {/* ── Footer ─────────────────────────────────────────────── */}
+      <footer className="lp-footer">
+        <div className="lp-container lp-footer-inner">
+          <div className="lp-logo">
+            <div className="lp-logo-icon">🍽️</div>
+            <span className="lp-logo-text">MenuQR</span>
           </div>
-          <span className="font-bold text-white">MenuQR</span>
+          <p className="lp-footer-copy">© 2026 MenuQR. Modern digital menus for restaurants &amp; cafés.</p>
+          <div className="lp-footer-links">
+            <Link href="/dashboard/login">Restaurant Login</Link>
+            <a
+              href={waLink("Hi! I have a question about MenuQR.")}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Contact
+            </a>
+          </div>
         </div>
-        <p className="text-purple-600 text-sm">© 2026 MenuQR. Modern digital menus for restaurants & cafes.</p>
       </footer>
     </div>
   );
