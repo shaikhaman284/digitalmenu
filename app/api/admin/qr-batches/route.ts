@@ -42,7 +42,6 @@ export async function GET(request: NextRequest) {
       const snap = await adminDb.collection('qr_codes').get();
       let maxNum = 0;
       for (const doc of snap.docs) {
-        // Slug format: MQ-0001
         const match = doc.id.match(/^MQ-(\d+)$/);
         if (match) {
           const num = parseInt(match[1], 10);
@@ -59,7 +58,6 @@ export async function GET(request: NextRequest) {
         .where('batch', '==', batchFilter)
         .get();
 
-      // Fetch bound restaurant names for display
       const restaurantIds = [...new Set(
         snap.docs
           .map((d) => d.data().restaurant_id as string | null)
@@ -81,15 +79,13 @@ export async function GET(request: NextRequest) {
       const qrCodes = snap.docs
         .map((d) => {
           const data = d.data();
-          const boundAt = data.bound_at?.toDate?.()?.toISOString() ?? null;
-          const createdAt = data.created_at?.toDate?.()?.toISOString() ?? null;
           return {
             slug: d.id,
             status: data.status as string,
             restaurant_id: data.restaurant_id as string | null,
             restaurant_name: data.restaurant_id ? (restaurantNames[data.restaurant_id] ?? null) : null,
-            bound_at: boundAt,
-            created_at: createdAt,
+            bound_at: data.bound_at?.toDate?.()?.toISOString() ?? null,
+            created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
           };
         })
         .sort((a, b) => a.slug.localeCompare(b.slug));
@@ -120,7 +116,6 @@ export async function GET(request: NextRequest) {
       } else {
         batchMap[batch].unbound++;
       }
-      // Use earliest created_at as batch creation time
       const createdAt = data.created_at?.toDate?.()?.toISOString() ?? null;
       if (createdAt && (!batchMap[batch].createdAt || createdAt < batchMap[batch].createdAt!)) {
         batchMap[batch].createdAt = createdAt;
@@ -132,6 +127,107 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({ batches });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/admin/qr-batches?slug=MQ-0001
+ *   → Delete a single QR code. If it was bound, clears qr_slug on the restaurant too.
+ *
+ * DELETE /api/admin/qr-batches?batch=BATCH-01
+ *   → Delete ALL QR codes in a batch. Releases any bound restaurants.
+ */
+export async function DELETE(request: NextRequest) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('mq_session')?.value;
+  if (!sessionCookie) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  try {
+    await verifyAdmin(sessionCookie);
+  } catch {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const slug = searchParams.get('slug');
+  const batchName = searchParams.get('batch');
+  const adminDb = getAdminDb();
+
+  try {
+    // ── Delete a single QR code ────────────────────────────────────────────
+    if (slug) {
+      const qrRef = adminDb.collection('qr_codes').doc(slug);
+      const qrSnap = await qrRef.get();
+
+      if (!qrSnap.exists) {
+        return NextResponse.json({ error: 'QR code not found' }, { status: 404 });
+      }
+
+      const qrData = qrSnap.data()!;
+      const writeBatch = adminDb.batch();
+
+      // If it was bound, clear the restaurant's qr_slug so menu goes offline
+      if (qrData.status === 'bound' && qrData.restaurant_id) {
+        const restRef = adminDb.collection('restaurants').doc(qrData.restaurant_id as string);
+        const restSnap = await restRef.get();
+        // Only clear if this restaurant still points to this slug
+        if (restSnap.exists && restSnap.data()?.qr_slug === slug) {
+          writeBatch.update(restRef, { qr_slug: '' });
+        }
+      }
+
+      writeBatch.delete(qrRef);
+      await writeBatch.commit();
+
+      return NextResponse.json({ success: true, deleted: 1 });
+    }
+
+    // ── Delete entire batch ────────────────────────────────────────────────
+    if (batchName) {
+      const snap = await adminDb
+        .collection('qr_codes')
+        .where('batch', '==', batchName)
+        .get();
+
+      if (snap.empty) {
+        return NextResponse.json({ error: 'Batch not found or already empty' }, { status: 404 });
+      }
+
+      // Firestore batch supports up to 500 ops — chunk if needed
+      const CHUNK = 400; // 2 ops per bound QR (delete + update restaurant)
+      let deleted = 0;
+
+      for (let i = 0; i < snap.docs.length; i += CHUNK) {
+        const chunk = snap.docs.slice(i, i + CHUNK);
+        const writeBatch = adminDb.batch();
+
+        for (const doc of chunk) {
+          const data = doc.data();
+          // Release restaurant if this QR was its active slug
+          if (data.status === 'bound' && data.restaurant_id) {
+            const restRef = adminDb.collection('restaurants').doc(data.restaurant_id as string);
+            const restSnap = await restRef.get();
+            if (restSnap.exists && restSnap.data()?.qr_slug === doc.id) {
+              writeBatch.update(restRef, { qr_slug: '' });
+            }
+          }
+          writeBatch.delete(doc.ref);
+          deleted++;
+        }
+
+        await writeBatch.commit();
+      }
+
+      return NextResponse.json({ success: true, deleted });
+    }
+
+    return NextResponse.json(
+      { error: 'Provide ?slug=MQ-xxxx or ?batch=BATCH-xx' },
+      { status: 400 }
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed';
     return NextResponse.json({ error: message }, { status: 500 });

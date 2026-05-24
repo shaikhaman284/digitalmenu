@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST — update restaurant profile (name, phone, location, logo_url) or bind QR slug
+// POST — update restaurant profile OR bind a new QR slug
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('mq_session')?.value;
@@ -73,40 +73,60 @@ export async function POST(request: NextRequest) {
     };
     const adminDb = getAdminDb();
 
-    // ── Special handling for QR binding ──────────────────────────────────────
-    // When binding a QR slug we must update BOTH:
-    //   1. qr_codes/{slug}  → status='bound', restaurant_id, bound_at
-    //   2. restaurants/{id} → qr_slug
-    // Without updating qr_codes the menu page sees status='unbound' and returns 404.
+    // ── QR Binding ────────────────────────────────────────────────────────────
+    // Full atomic sequence:
+    //  1. Verify the new QR exists and is not already bound to a DIFFERENT restaurant
+    //  2. If the restaurant already has a current qr_slug (different from the new one),
+    //     release it back to 'unbound' so the old QR stops serving the menu
+    //  3. Bind the new QR (status='bound', restaurant_id, bound_at)
+    //  4. Update restaurants/{id}.qr_slug to the new slug
+    // All steps happen in a single Firestore batch write — atomic, no half-state.
     if ('qr_slug' in body && body.qr_slug) {
-      const slug = body.qr_slug;
-      const qrRef = adminDb.collection('qr_codes').doc(slug);
-      const qrSnap = await qrRef.get();
+      const newSlug = body.qr_slug;
+      const newQrRef = adminDb.collection('qr_codes').doc(newSlug);
+      const newQrSnap = await newQrRef.get();
 
-      if (!qrSnap.exists) {
+      if (!newQrSnap.exists) {
         return NextResponse.json({ error: 'QR code not found in system' }, { status: 404 });
       }
 
-      const qrData = qrSnap.data()!;
-      if (qrData.status === 'bound' && qrData.restaurant_id !== rest.id) {
+      const newQrData = newQrSnap.data()!;
+
+      // Reject if this QR is already bound to a DIFFERENT restaurant
+      if (newQrData.status === 'bound' && newQrData.restaurant_id !== rest.id) {
         return NextResponse.json(
           { error: 'This QR code is already bound to another restaurant' },
           { status: 409 }
         );
       }
 
-      // Atomic write to both docs
       const writeBatch = adminDb.batch();
+      const restRef = adminDb.collection('restaurants').doc(rest.id);
 
-      writeBatch.update(qrRef, {
+      // Step 1 — Release the old QR slug (if any and different from the new one)
+      const currentSlug = rest.qr_slug as string | undefined;
+      if (currentSlug && currentSlug !== newSlug) {
+        const oldQrRef = adminDb.collection('qr_codes').doc(currentSlug);
+        const oldQrSnap = await oldQrRef.get();
+        // Only release if the old doc still points to THIS restaurant
+        if (oldQrSnap.exists && oldQrSnap.data()?.restaurant_id === rest.id) {
+          writeBatch.update(oldQrRef, {
+            status: 'unbound',
+            restaurant_id: null,
+            bound_at: null,
+          });
+        }
+      }
+
+      // Step 2 — Bind the new QR
+      writeBatch.update(newQrRef, {
         status: 'bound',
         restaurant_id: rest.id,
         bound_at: FieldValue.serverTimestamp(),
       });
 
-      writeBatch.update(adminDb.collection('restaurants').doc(rest.id), {
-        qr_slug: slug,
-      });
+      // Step 3 — Update restaurant's active slug
+      writeBatch.update(restRef, { qr_slug: newSlug });
 
       await writeBatch.commit();
       return NextResponse.json({ success: true });
