@@ -1,0 +1,112 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# ============================================================
+# SECURITY — Never commit secrets or credentials
+# ============================================================
+
+# All environment files (including .env.local.example which contains real keys)
+.env
+.env.*
+.env.local
+.env.local.*
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+.env.staging.local
+
+# Firebase service account JSON files (contain private keys)
+serviceAccount.json
+service-account.json
+service_account.json
+*-service-account.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+
+# ============================================================
+# Next.js
+# ============================================================
+/.next/
+/out/
+/build
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts
+
+# ============================================================
+# Dependencies
+# ============================================================
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ============================================================
+# Testing & Coverage
+# ============================================================
+/coverage
+/.nyc_output
+
+# ============================================================
+# Debug & Logs
+# ============================================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# ============================================================
+# Firebase
+# ============================================================
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+pubsub-debug.log
+
+# ============================================================
+# Vercel
+# ============================================================
+.vercel
+
+# ============================================================
+# OS & Editor files
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# JetBrains IDEs
+.idea/
+
+# Vim/Emacs
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Misc
+# ============================================================
+*.pem

@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    function isRestaurantOwner(restaurantId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.uid == request.auth.uid;
+    }
+
+    // ─── QR Codes ───────────────────────────────────────────────────────────
+    // Read: authenticated users only | Write: admin only
+    match /qr_codes/{slug} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ─── Restaurants ─────────────────────────────────────────────────────────
+    // Read: owner or admin | Write: owner or admin
+    match /restaurants/{restaurantId} {
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow write: if isAdmin() ||
+        (isAuthenticated() && (
+          resource == null || resource.data.uid == request.auth.uid
+        ));
+
+      // Categories: same as restaurant access
+      match /categories/{categoryId} {
+        allow read: if isAdmin() || isRestaurantOwner(restaurantId);
+        allow write: if isAdmin() || isRestaurantOwner(restaurantId);
+      }
+
+      // AI Import tracking
+      match /ai_imports/{monthKey} {
+        allow read, write: if isAdmin() || isRestaurantOwner(restaurantId);
+      }
+
+      // Menu Items: public read, owner write
+      match /menu_items/{itemId} {
+        allow read: if true; // public
+        allow write: if isAdmin() || isRestaurantOwner(restaurantId);
+
+        // Likes: public read/write (no auth required for customers)
+        match /likes/{visitorToken} {
+          allow read: if true;
+          allow write: if true; // any visitor can like/unlike
+        }
+
+        // Reviews: public read, public write (one-per-visitor enforced in app)
+        match /reviews/{reviewId} {
+          allow read: if true;
+          allow create: if true; // any visitor can review
+          allow update, delete: if false; // reviews cannot be edited/deleted
+        }
+      }
+    }
+  }
+}

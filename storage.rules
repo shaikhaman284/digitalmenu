@@ -1,0 +1,26 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: check if the request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ─── Restaurant Logos ───────────────────────────────────────────────────
+    // Public read, write only by the restaurant owner
+    match /restaurants/{restaurantId}/logo {
+      allow read: if true; // public
+      allow write: if isAuthenticated() &&
+        firestore.get(/databases/(default)/documents/restaurants/$(restaurantId)).data.uid == request.auth.uid;
+    }
+
+    // ─── Menu Item Images ────────────────────────────────────────────────────
+    // Public read, write only by the restaurant owner
+    match /restaurants/{restaurantId}/menu/{itemId} {
+      allow read: if true; // public
+      allow write: if isAuthenticated() &&
+        firestore.get(/databases/(default)/documents/restaurants/$(restaurantId)).data.uid == request.auth.uid;
+    }
+  }
+}
