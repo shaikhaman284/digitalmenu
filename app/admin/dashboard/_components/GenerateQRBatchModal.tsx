@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -22,15 +22,83 @@ interface GeneratedQR {
   url: string;
 }
 
+/** Render a high-resolution QR PNG (2400×2600 px) with slug label */
+async function renderHDQR(
+  slug: string,
+  hiddenCanvas: HTMLCanvasElement
+): Promise<Blob> {
+  const W = 2400;
+  const H = 2600;
+  const QR_SIZE = 2200;
+  const PADDING = (W - QR_SIZE) / 2;
+
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = W;
+  exportCanvas.height = H;
+  const ctx = exportCanvas.getContext('2d')!;
+
+  // White background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw QR (upscale from hidden 512px canvas)
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(hiddenCanvas, PADDING, PADDING, QR_SIZE, QR_SIZE);
+
+  // Draw slug label
+  ctx.fillStyle = '#111111';
+  ctx.font = `bold 120px monospace`;
+  ctx.textAlign = 'center';
+  ctx.fillText(slug, W / 2, QR_SIZE + PADDING + 140);
+
+  return new Promise<Blob>((resolve, reject) => {
+    exportCanvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Canvas toBlob failed'));
+    }, 'image/png');
+  });
+}
+
 export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [generated, setGenerated] = useState<GeneratedQR[]>([]);
+  const [loadingNextStart, setLoadingNextStart] = useState(false);
   const [form, setForm] = useState({ batch: 'BATCH-01', startNum: '1', count: '10' });
+  // Hidden 512px canvas refs for HD extraction
   const qrRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  // Auto-fetch next available start number when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoadingNextStart(true);
+    fetch('/api/admin/qr-batches?nextStart=1')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.nextStart) {
+          setForm((prev) => ({ ...prev, startNum: String(data.nextStart) }));
+        }
+      })
+      .catch(() => { /* silent — keep default */ })
+      .finally(() => setLoadingNextStart(false));
+  }, [isOpen]);
+
+  // Use window.location.origin at runtime so it always reflects the real domain
+  const getBaseUrl = () => {
+    if (typeof window !== 'undefined') {
+      return process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+    }
+    return process.env.NEXT_PUBLIC_BASE_URL || '';
+  };
+
+  const setQrRef = useCallback((slug: string, canvas: HTMLCanvasElement | null) => {
+    if (canvas) {
+      qrRefs.current.set(slug, canvas);
+    } else {
+      qrRefs.current.delete(slug);
+    }
+  }, []);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -51,10 +119,10 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
       }
 
       const { slugs } = await res.json() as { slugs: string[] };
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      const base = getBaseUrl();
       const qrs: GeneratedQR[] = slugs.map((slug) => ({
         slug,
-        url: `${baseUrl}/m/${slug}`,
+        url: `${base}/m/${slug}`,
       }));
 
       setGenerated(qrs);
@@ -66,15 +134,6 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
     }
   }
 
-
-  const setQrRef = useCallback((slug: string, canvas: HTMLCanvasElement | null) => {
-    if (canvas) {
-      qrRefs.current.set(slug, canvas);
-    } else {
-      qrRefs.current.delete(slug);
-    }
-  }, []);
-
   async function handleDownloadAll() {
     setDownloadLoading(true);
     try {
@@ -83,36 +142,13 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
       for (const { slug } of generated) {
         const canvas = qrRefs.current.get(slug);
         if (!canvas) continue;
-
-        // Create a new canvas with slug text below
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = 460;
-        exportCanvas.height = 500;
-        const ctx = exportCanvas.getContext('2d')!;
-
-        // White background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, 460, 500);
-
-        // Draw QR
-        ctx.drawImage(canvas, 30, 20, 400, 400);
-
-        // Draw slug text
-        ctx.fillStyle = '#000000';
-        ctx.font = 'bold 28px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(slug, 230, 460);
-
-        // Convert to blob
-        const dataUrl = exportCanvas.toDataURL('image/png');
-        const response = await fetch(dataUrl);
-        const blob = await response.blob();
+        const blob = await renderHDQR(slug, canvas);
         zip.file(`${slug}.png`, blob);
       }
 
       const content = await zip.generateAsync({ type: 'blob' });
       saveAs(content, `${form.batch}-qr-codes.zip`);
-    } catch (err) {
+    } catch {
       toastError('Failed to download ZIP');
     } finally {
       setDownloadLoading(false);
@@ -123,22 +159,17 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
     const canvas = qrRefs.current.get(slug);
     if (!canvas) return;
 
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = 460;
-    exportCanvas.height = 500;
-    const ctx = exportCanvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 460, 500);
-    ctx.drawImage(canvas, 30, 20, 400, 400);
-    ctx.fillStyle = '#000000';
-    ctx.font = 'bold 28px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(slug, 230, 460);
-
-    const link = document.createElement('a');
-    link.download = `${slug}.png`;
-    link.href = exportCanvas.toDataURL('image/png');
-    link.click();
+    try {
+      const blob = await renderHDQR(slug, canvas);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `${slug}.png`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toastError(`Failed to download ${slug}`);
+    }
   }
 
   function handleClose() {
@@ -148,12 +179,7 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title="Generate QR Batch"
-      size="xl"
-    >
+    <Modal isOpen={isOpen} onClose={handleClose} title="Generate QR Batch" size="xl">
       {generated.length === 0 ? (
         <form onSubmit={handleGenerate} className="flex flex-col gap-4">
           <Input
@@ -165,7 +191,7 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Start Number"
+              label={loadingNextStart ? 'Start Number (loading…)' : 'Start Number'}
               type="number"
               min="1"
               value={form.startNum}
@@ -211,27 +237,36 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
             </Button>
           </div>
 
-          {/* QR Grid */}
+          {/* QR Grid — hidden 512px canvases for HD export, 100px preview */}
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-1">
             {generated.map(({ slug, url }) => (
               <div
                 key={slug}
                 className="glass-light rounded-xl p-2 flex flex-col items-center gap-1 cursor-pointer hover:border-purple-500/40 transition-colors"
                 onClick={() => downloadSingle(slug)}
-                title={`Download ${slug}`}
+                title={`Download HD PNG — ${slug}`}
               >
-                {/* Hidden QR canvas for extraction */}
-                <div className="relative">
+                {/* Hidden HD canvas for data extraction (512×512) */}
+                <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden' }}>
                   <QRCodeCanvas
-                    id={`qr-${slug}`}
                     value={url}
-                    size={100}
+                    size={512}
                     bgColor="#ffffff"
                     fgColor="#000000"
-                    level="M"
+                    level="H"
+                    marginSize={2}
                     ref={(canvas: HTMLCanvasElement | null) => setQrRef(slug, canvas)}
                   />
                 </div>
+                {/* Visible preview (100px) */}
+                <QRCodeCanvas
+                  value={url}
+                  size={100}
+                  bgColor="#ffffff"
+                  fgColor="#000000"
+                  level="H"
+                  marginSize={1}
+                />
                 <span className="text-[10px] font-mono text-purple-300">{slug}</span>
               </div>
             ))}

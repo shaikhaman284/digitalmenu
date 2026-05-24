@@ -122,7 +122,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
 
       {/* ── Hero Header ─────────────────────────────────────── */}
       <div style={{ background: 'linear-gradient(160deg, #fff8f0 0%, #fdfaf5 100%)' }}>
-        <div style={{ padding: '40px 20px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '14px' }}>
+        <div className="mf-hero-top" style={{ paddingBottom: 28, paddingLeft: 20, paddingRight: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '14px' }}>
 
           {/* Logo ring */}
           <div style={{
@@ -310,9 +310,9 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
       </div>
 
       {/* ── Footer ──────────────────────────────────────────── */}
-      <div style={{
+      <div className="mf-footer-safe" style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
-        textAlign: 'center', padding: '10px 16px',
+        textAlign: 'center', paddingTop: 10, paddingLeft: 16, paddingRight: 16,
         fontSize: '0.75rem', color: '#9c8e7a',
         background: 'rgba(253,250,245,0.92)',
         backdropFilter: 'blur(12px)',

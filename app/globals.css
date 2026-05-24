@@ -449,3 +449,143 @@
 .admin-theme ::-webkit-scrollbar-track { background: #1a1030; }
 .admin-theme ::-webkit-scrollbar-thumb { background: #4a1d6e; border-radius: 3px; }
 .admin-theme ::-webkit-scrollbar-thumb:hover { background: #c026d3; }
+
+/* ─── Restaurant Dashboard Layout — Mobile Responsive ───────────────────── */
+
+/* Root flex container */
+.db-layout {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  position: relative;
+}
+
+/* Sidebar — desktop default: always visible */
+.db-sidebar-drawer {
+  width: 232px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+}
+
+/* Close button inside sidebar — hidden on desktop */
+.db-sidebar-close {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--db-text-muted);
+  padding: 2px;
+  border-radius: 6px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.db-sidebar-close:hover { color: var(--db-text); }
+
+/* Overlay backdrop */
+.db-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(28, 22, 17, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Mobile top bar */
+.db-mobile-header {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--db-border);
+  background: var(--db-sidebar);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Hamburger button */
+.db-hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--db-text-muted);
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.db-hamburger:hover { color: var(--db-text); background: var(--db-surface-2); }
+
+/* Right column (mobile top bar + main) */
+.db-main-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Mobile breakpoint (≤ 767px) ──────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Sidebar becomes a fixed drawer */
+  .db-sidebar-drawer {
+    position: fixed;
+    inset-y: 0;
+    left: 0;
+    z-index: 40;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 24px rgba(28, 22, 17, 0.18);
+  }
+
+  .db-sidebar-drawer.open {
+    transform: translateX(0);
+  }
+
+  /* Show overlay and close button when open */
+  .db-sidebar-overlay {
+    display: block;
+  }
+
+  .db-sidebar-close {
+    display: flex;
+  }
+
+  /* Show mobile header */
+  .db-mobile-header {
+    display: flex;
+  }
+}
+
+/* ─── Customer Menu — Safe Area Insets ──────────────────────────────────── */
+
+/* Hero: add top safe area so content clears the notch */
+.menu-theme .mf-hero-top {
+  padding-top: max(40px, calc(40px + env(safe-area-inset-top)));
+}
+
+/* Powered-by footer: add bottom safe area */
+.menu-theme .mf-footer-safe {
+  padding-bottom: max(10px, calc(10px + env(safe-area-inset-bottom)));
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+

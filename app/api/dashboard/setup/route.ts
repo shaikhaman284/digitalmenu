@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { cookies } from 'next/headers';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export const runtime = 'nodejs';
 
@@ -53,8 +54,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-
-// POST — update restaurant profile (name, phone, location)
+// POST — update restaurant profile (name, phone, location, logo_url) or bind QR slug
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('mq_session')?.value;
@@ -64,15 +64,65 @@ export async function POST(request: NextRequest) {
     const rest = await getRestaurant(sessionCookie);
     if (!rest) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const body = await request.json() as { name?: string; phone?: string; location?: string; logo_url?: string; qr_slug?: string };
-    const allowed = ['name', 'phone', 'location', 'logo_url', 'qr_slug'];
+    const body = await request.json() as {
+      name?: string;
+      phone?: string;
+      location?: string;
+      logo_url?: string;
+      qr_slug?: string;
+    };
+    const adminDb = getAdminDb();
+
+    // ── Special handling for QR binding ──────────────────────────────────────
+    // When binding a QR slug we must update BOTH:
+    //   1. qr_codes/{slug}  → status='bound', restaurant_id, bound_at
+    //   2. restaurants/{id} → qr_slug
+    // Without updating qr_codes the menu page sees status='unbound' and returns 404.
+    if ('qr_slug' in body && body.qr_slug) {
+      const slug = body.qr_slug;
+      const qrRef = adminDb.collection('qr_codes').doc(slug);
+      const qrSnap = await qrRef.get();
+
+      if (!qrSnap.exists) {
+        return NextResponse.json({ error: 'QR code not found in system' }, { status: 404 });
+      }
+
+      const qrData = qrSnap.data()!;
+      if (qrData.status === 'bound' && qrData.restaurant_id !== rest.id) {
+        return NextResponse.json(
+          { error: 'This QR code is already bound to another restaurant' },
+          { status: 409 }
+        );
+      }
+
+      // Atomic write to both docs
+      const writeBatch = adminDb.batch();
+
+      writeBatch.update(qrRef, {
+        status: 'bound',
+        restaurant_id: rest.id,
+        bound_at: FieldValue.serverTimestamp(),
+      });
+
+      writeBatch.update(adminDb.collection('restaurants').doc(rest.id), {
+        qr_slug: slug,
+      });
+
+      await writeBatch.commit();
+      return NextResponse.json({ success: true });
+    }
+
+    // ── General profile update ────────────────────────────────────────────────
+    const allowed = ['name', 'phone', 'location', 'logo_url'];
     const update: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in body) update[key] = (body as Record<string, unknown>)[key];
     }
 
-    const adminDb = getAdminDb();
-    await adminDb.collection('restaurants').doc((rest as { id: string }).id).update(update);
+    if (Object.keys(update).length > 0) {
+      await adminDb.collection('restaurants').doc(rest.id).update(update);
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error' }, { status: 500 });
