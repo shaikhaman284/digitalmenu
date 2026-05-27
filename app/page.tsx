@@ -8,7 +8,40 @@ import {
 export const metadata: Metadata = {
   title: 'MenuQR — Modern Digital Menus for Restaurants & Cafes',
   description:
-    'Replace paper menus with a beautiful QR-based digital experience. AI-powered setup, customer likes & reviews, real-time updates. No app needed.',
+    'Replace paper menus with a beautiful QR-based digital experience. AI-powered setup, customer likes & reviews, real-time updates. No app needed. Live for restaurants across India.',
+  keywords: [
+    'digital menu India', 'QR code menu restaurant', 'restaurant digital menu',
+    'contactless menu', 'online menu QR', 'cafe digital menu', 'MenuQR',
+    'restaurant management app', 'menu QR code India',
+  ],
+  alternates: {
+    canonical: process.env.NEXT_PUBLIC_BASE_URL || 'https://digitalmenu-inky-theta.vercel.app',
+  },
+  openGraph: {
+    title: 'MenuQR — Modern Digital Menus for Restaurants & Cafes',
+    description: 'Replace paper menus with a beautiful QR-based digital experience. AI-powered setup, customer likes & reviews. No app needed.',
+    type: 'website',
+    locale: 'en_IN',
+  },
+};
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'MenuQR',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web',
+  description: 'Digital QR-based menu platform for restaurants and cafes. AI-powered setup, customer reviews, and real-time analytics.',
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'INR',
+  },
+  aggregateRating: {
+    '@type': 'AggregateRating',
+    ratingValue: '5',
+    ratingCount: '3',
+  },
 };
 
 const features = [
@@ -91,6 +124,11 @@ const waLink = (msg: string) =>
 export default function LandingPage() {
   return (
     <div className="lp-root">
+      {/* JSON-LD structured data for Google rich results */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
 
       {/* ── Nav ────────────────────────────────────────────────── */}
       <header className="lp-nav">

@@ -31,19 +31,21 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
 
   useEffect(() => {
     if (!visitorToken || items.length === 0) return;
-    const checkLikes = async () => {
-      const liked = new Set<string>();
-      await Promise.all(
-        items.map(async (item) => {
-          const res = await fetch(`/api/public/like?restaurantId=${restaurant.id}&itemId=${item.id}&visitorToken=${visitorToken}`);
-          const data = await res.json();
-          if (data.liked) liked.add(item.id);
-        })
-      );
-      setLikedIds(liked);
-    };
-    checkLikes();
+    // Batch all like checks in a SINGLE request instead of one per item (N+1 fix)
+    const itemIds = items.map((i) => i.id).join(',');
+    fetch(`/api/public/like?restaurantId=${restaurant.id}&itemIds=${itemIds}&visitorToken=${visitorToken}`)
+      .then((r) => r.json())
+      .then((data: { liked: Record<string, boolean> }) => {
+        const liked = new Set<string>(
+          Object.entries(data.liked ?? {})
+            .filter(([, v]) => v)
+            .map(([k]) => k)
+        );
+        setLikedIds(liked);
+      })
+      .catch(() => { /* silent */ });
   }, [visitorToken, restaurant.id]);
+
 
   const handleLike = useCallback(async (item: MenuItem, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -165,7 +167,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
             flexShrink: 0,
           }}>
             {restaurant.logo_url ? (
-              <Image src={restaurant.logo_url} alt={restaurant.name} width={96} height={96} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
+              <Image src={restaurant.logo_url} alt={restaurant.name} width={96} height={96} style={{ width: '100%', height: '100%', objectFit: 'cover' }} priority />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38 }}>🍽️</div>
             )}
@@ -214,7 +216,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <div style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', background: '#f7f3ec', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {mostLoved.image_url
-                  ? <Image src={mostLoved.image_url} alt={mostLoved.name} width={72} height={72} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
+                  ? <Image src={mostLoved.image_url} alt={mostLoved.name} width={72} height={72} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   : <span style={{ fontSize: 28 }}>{getCategoryIcon(mostLoved.category)}</span>
                 }
               </div>
@@ -282,7 +284,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                   {/* Image */}
                   <div style={{ position: 'relative', width: 88, height: 88, borderRadius: 12, overflow: 'hidden', background: '#f7f3ec', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {item.image_url ? (
-                      <Image src={item.image_url} alt={item.name} fill className="object-cover" sizes="88px" unoptimized />
+                      <Image src={item.image_url} alt={item.name} fill className="object-cover" sizes="88px" />
                     ) : (
                       <span style={{ fontSize: 34 }}>{getCategoryIcon(item.category)}</span>
                     )}
@@ -425,7 +427,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                         fill
                         style={{ objectFit: 'contain', padding: '8px' }}
                         sizes="100vw"
-                        unoptimized
+                        priority
                       />
                     ) : (
                       <span style={{ fontSize: 72 }}>{getCategoryIcon(modalItem.category)}</span>
