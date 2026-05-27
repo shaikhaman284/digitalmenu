@@ -4,13 +4,17 @@ import { MenuPage } from './_components/MenuPage';
 import type { Metadata } from 'next';
 import type { QRCode, Restaurant, MenuItem, Category } from '@/types';
 import { Timestamp } from 'firebase-admin/firestore';
+import { verifySlugToken } from '@/lib/qr-token';
+
 
 export const revalidate = 300; // ISR: rebuild every 5 minutes
 export const dynamic = 'force-dynamic'; // Always SSR, never statically at build time
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ t?: string }>;
 }
+
 
 async function getMenuData(slug: string) {
   const adminDb = getAdminDb();
@@ -47,8 +51,10 @@ async function getMenuData(slug: string) {
   return { restaurant, categories, menuItems };
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { slug } = await params;
+  const { t } = await searchParams;
+  if (!verifySlugToken(slug, t)) return { title: 'Menu Not Found | MenuQR' };
   const data = await getMenuData(slug);
   if (!data) return { title: 'Menu Not Found | MenuQR' };
   return {
@@ -56,6 +62,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     description: `View the digital menu for ${data.restaurant.name}. Scan, browse, and order with ease.`,
   };
 }
+
 
 // Helper to convert Firestore Admin Timestamp to a plain serializable object
 function serializeData(data: unknown): unknown {
@@ -72,9 +79,15 @@ function serializeData(data: unknown): unknown {
   return data;
 }
 
-export default async function MenuSlugPage({ params }: PageProps) {
+export default async function MenuSlugPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
+  const { t } = await searchParams;
+
+  // Verify the HMAC token — prevents enumeration of sequential QR slugs
+  if (!verifySlugToken(slug, t)) return notFound();
+
   const data = await getMenuData(slug);
+
 
   if (!data) return notFound();
 

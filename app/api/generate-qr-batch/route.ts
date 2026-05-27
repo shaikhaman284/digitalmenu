@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { cookies } from 'next/headers';
 import { FieldValue } from 'firebase-admin/firestore';
+import { buildMenuUrl } from '@/lib/qr-token';
 
 export const runtime = 'nodejs';
 
@@ -49,5 +50,13 @@ export async function POST(request: NextRequest) {
   }
 
   await firestoreBatch.commit();
-  return NextResponse.json({ success: true, slugs });
+
+  // Build signed QR URLs — the token prevents enumeration of sequential slugs
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
+  const qrs = slugs.map((slug) => ({
+    slug,
+    url: buildMenuUrl(baseUrl, slug),
+  }));
+
+  return NextResponse.json({ success: true, slugs, qrs });
 }
