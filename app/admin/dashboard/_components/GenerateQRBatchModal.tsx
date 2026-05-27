@@ -118,12 +118,8 @@ export function GenerateQRBatchModal({ isOpen, onClose, onSuccess }: Props) {
         throw new Error(err.error || 'Failed to generate QR codes');
       }
 
-      const { slugs } = await res.json() as { slugs: string[] };
-      const base = getBaseUrl();
-      const qrs: GeneratedQR[] = slugs.map((slug) => ({
-        slug,
-        url: `${base}/m/${slug}`,
-      }));
+      // Server returns signed URLs with HMAC token embedded
+      const { qrs } = await res.json() as { qrs: GeneratedQR[] };
 
       setGenerated(qrs);
       success(`Generated ${count} QR codes in ${form.batch}`);

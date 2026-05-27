@@ -27,6 +27,26 @@ function SetupContent() {
   const [previewUrl, setPreviewUrl] = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ name: '', phone: '', location: '' });
+  const [signedUrl, setSignedUrl] = useState('');
+
+  async function fetchSignedUrl(slug: string) {
+    try {
+      const res = await fetch('/api/dashboard/signed-menu-url');
+      if (res.ok) {
+        const { signedUrl } = await res.json();
+        if (signedUrl) setSignedUrl(signedUrl);
+        else {
+          const base = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+          setSignedUrl(`${base}/m/${slug}`);
+        }
+      }
+    } catch {
+      const base = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+      setSignedUrl(`${base}/m/${slug}`);
+    }
+  }
+
+
 
   useEffect(() => {
     fetch('/api/dashboard/setup')
@@ -36,9 +56,11 @@ function SetupContent() {
         setProfile(data);
         setForm({ name: data.name, phone: data.phone, location: data.location });
         if (data.logo_url) setPreviewUrl(data.logo_url);
+        if (data.qr_slug) fetchSignedUrl(data.qr_slug);
       })
       .catch((err) => toastError(err.message));
   }, []);
+
 
   async function handleLogoUpload(file: File) {
     if (!profile) return;
@@ -94,7 +116,9 @@ function SetupContent() {
       setQrStatus('success');
       setQrMessage(`QR ${slug} is now active and live!`);
       setProfile((p) => p ? { ...p, qr_slug: slug } : p);
+      fetchSignedUrl(slug);
       success(`QR ${slug} bound successfully!`);
+
     } catch (err) {
       setQrStatus('error');
       setQrMessage(err instanceof Error ? err.message : 'Invalid QR code');
@@ -213,9 +237,10 @@ function SetupContent() {
               <div style={{ padding: '14px 16px', borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
                 <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Currently Bound QR</p>
                 <p style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--db-text)', fontFamily: 'var(--db-font-heading)' }}>{profile.qr_slug}</p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--db-text-muted)', marginTop: 2 }}>
-                  {process.env.NEXT_PUBLIC_BASE_URL}/m/{profile.qr_slug}
+                <p style={{ fontSize: '0.75rem', color: 'var(--db-text-muted)', marginTop: 2, wordBreak: 'break-all' }}>
+                  {signedUrl || `${process.env.NEXT_PUBLIC_BASE_URL}/m/${profile.qr_slug}`}
                 </p>
+
               </div>
             )}
           </div>

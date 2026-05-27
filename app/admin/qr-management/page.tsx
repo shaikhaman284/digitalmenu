@@ -242,6 +242,8 @@ function BatchDetailView({
     ? (process.env.NEXT_PUBLIC_BASE_URL || window.location.origin)
     : '';
 
+  const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
+
   const setQrRef = useCallback((slug: string, canvas: HTMLCanvasElement | null) => {
     if (canvas) qrRefs.current.set(slug, canvas);
     else qrRefs.current.delete(slug);
@@ -251,10 +253,21 @@ function BatchDetailView({
     setLoading(true);
     fetch(`/api/admin/qr-batches?batch=${encodeURIComponent(batch.batch)}`)
       .then((r) => r.json())
-      .then((d) => setQrItems(d.qrCodes || []))
+      .then((d) => {
+        setQrItems(d.qrCodes || []);
+        // Build signed URLs server-side for each slug
+        return fetch('/api/admin/signed-qr-urls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slugs: (d.qrCodes || []).map((q: QRItem) => q.slug) }),
+        });
+      })
+      .then((r) => r.json())
+      .then((d) => setQrUrls(d.urls || {}))
       .catch(() => toastError('Failed to load QR codes'))
       .finally(() => setLoading(false));
   }
+
 
   useEffect(() => { loadItems(); }, [batch.batch]);
 
@@ -384,7 +397,8 @@ function BatchDetailView({
           <div className="glass rounded-2xl overflow-hidden">
             <div className="divide-y divide-purple-900/20">
               {qrItems.map((item) => {
-                const qrUrl = `${baseUrl}/m/${item.slug}`;
+                // Use server-signed URL (contains HMAC token) if available, else fall back
+                const qrUrl = qrUrls[item.slug] || `${baseUrl}/m/${item.slug}`;
                 const isBound = item.status === 'bound';
                 return (
                   <div
