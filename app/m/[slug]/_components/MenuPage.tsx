@@ -408,12 +408,12 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
               const isLiking = likingIds.has(modalItem.id);
               return (
                 <>
-                  {/* Image hero */}
+                  {/* Image hero — objectFit: contain ensures the full image is shown */}
                   <div style={{
                     position: 'relative',
                     width: '100%',
-                    height: modalItem.image_url ? 260 : 140,
-                    background: 'linear-gradient(135deg, #f7f3ec 0%, #fff3e4 100%)',
+                    height: modalItem.image_url ? 280 : 140,
+                    background: '#f7f3ec',
                     flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     overflow: 'hidden',
@@ -423,19 +423,12 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                         src={modalItem.image_url}
                         alt={modalItem.name}
                         fill
-                        style={{ objectFit: 'cover' }}
+                        style={{ objectFit: 'contain', padding: '8px' }}
                         sizes="100vw"
                         unoptimized
                       />
                     ) : (
                       <span style={{ fontSize: 72 }}>{getCategoryIcon(modalItem.category)}</span>
-                    )}
-                    {/* Gradient overlay at bottom for readability */}
-                    {modalItem.image_url && (
-                      <div style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0, height: 80,
-                        background: 'linear-gradient(transparent, #fdfaf5)',
-                      }} />
                     )}
                     {/* Close button */}
                     <button
