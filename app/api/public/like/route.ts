@@ -46,24 +46,53 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET /api/public/like?restaurantId=&itemId=&visitorToken=
+/**
+ * GET /api/public/like
+ *
+ * Two modes:
+ * 1. Batch check (preferred): ?restaurantId=&itemIds=id1,id2,id3&visitorToken=
+ *    Returns: { liked: { [itemId]: boolean } }
+ *
+ * 2. Single check (legacy): ?restaurantId=&itemId=&visitorToken=
+ *    Returns: { liked: boolean }
+ */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const restaurantId = searchParams.get('restaurantId');
-  const itemId = searchParams.get('itemId');
   const visitorToken = searchParams.get('visitorToken');
+  const itemId = searchParams.get('itemId');
+  const itemIds = searchParams.get('itemIds'); // comma-separated for batch
 
-  if (!restaurantId || !itemId || !visitorToken) {
+  if (!restaurantId || !visitorToken) {
     return NextResponse.json({ liked: false });
   }
 
   try {
     const adminDb = getAdminDb();
+
+    // ── Batch mode: check multiple items in parallel ───────────────────────
+    if (itemIds) {
+      const ids = itemIds.split(',').filter(Boolean).slice(0, 100); // max 100
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const likeRef = adminDb
+            .collection('restaurants').doc(restaurantId)
+            .collection('menu_items').doc(id)
+            .collection('likes').doc(visitorToken);
+          const doc = await likeRef.get();
+          return [id, doc.exists] as [string, boolean];
+        })
+      );
+      const liked: Record<string, boolean> = Object.fromEntries(results);
+      return NextResponse.json({ liked });
+    }
+
+    // ── Single mode (legacy) ───────────────────────────────────────────────
+    if (!itemId) return NextResponse.json({ liked: false });
     const likeRef = adminDb
       .collection('restaurants').doc(restaurantId)
       .collection('menu_items').doc(itemId)
       .collection('likes').doc(visitorToken);
-
     const doc = await likeRef.get();
     return NextResponse.json({ liked: doc.exists });
   } catch {

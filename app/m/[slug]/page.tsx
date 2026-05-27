@@ -7,8 +7,10 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { verifySlugToken } from '@/lib/qr-token';
 
 
-export const revalidate = 300; // ISR: rebuild every 5 minutes
-export const dynamic = 'force-dynamic'; // Always SSR, never statically at build time
+export const revalidate = 60; // ISR: serve from CDN cache, rebuild in background every 60s
+// Note: 'force-dynamic' removed — menus rarely change mid-session;
+// the CDN will serve cached HTML in ~50ms instead of hitting Firestore every time.
+
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -57,9 +59,26 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   if (!verifySlugToken(slug, t)) return { title: 'Menu Not Found | MenuQR' };
   const data = await getMenuData(slug);
   if (!data) return { title: 'Menu Not Found | MenuQR' };
+  const { restaurant } = data;
+  const title = `${restaurant.name} Menu`;
+  const description = `Browse the digital menu for ${restaurant.name}${restaurant.location ? ` in ${restaurant.location}` : ''}. View dishes, prices, ratings and customer reviews.`;
   return {
-    title: `${data.restaurant.name} Menu | MenuQR`,
-    description: `View the digital menu for ${data.restaurant.name}. Scan, browse, and order with ease.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      ...(restaurant.logo_url ? { images: [{ url: restaurant.logo_url, width: 400, height: 400, alt: restaurant.name }] } : {}),
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+      ...(restaurant.logo_url ? { images: [restaurant.logo_url] } : {}),
+    },
+    // Don't index individual menu pages — they require a signed URL token
+    robots: { index: false, follow: false },
   };
 }
 
