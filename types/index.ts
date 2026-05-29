@@ -30,11 +30,23 @@ export interface Category {
   itemCount?: number; // only present in API responses
 }
 
+/**
+ * Pricing tiers for a menu item.
+ * At least one tier must be set. If only `full` is set, it behaves like a single price.
+ */
+export interface PricingTiers {
+  full?: number;   // Full plate / portion price
+  half?: number;   // Half plate price
+  qtr?: number;    // Quarter plate price
+  piece?: number;  // Per-piece price
+}
+
 export interface MenuItem {
   id: string; // document ID
   name: string;
   description: string;
-  price: number;
+  price: number;          // base/display price (= first defined tier) — kept for backward compat
+  pricing?: PricingTiers; // optional multi-tier pricing; if absent, `price` is used
   category: string;
   image_url: string | null;
   is_available: boolean;
@@ -61,7 +73,8 @@ export interface Review {
 export interface MenuItemDraft {
   name: string;
   category: string;
-  price: number;
+  price: number;          // base price (first defined tier)
+  pricing?: PricingTiers; // optional multi-tier pricing
   description: string;
 }
 

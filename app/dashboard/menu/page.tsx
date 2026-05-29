@@ -12,10 +12,45 @@ import { AddItemModal } from './_components/AddItemModal';
 import { AIImportModal } from './_components/AIImportModal';
 import Image from 'next/image';
 
+interface PricingTiers {
+  full?: number;
+  half?: number;
+  qtr?: number;
+  piece?: number;
+}
+
 interface MenuItem {
   id: string; name: string; category: string; price: number;
+  pricing?: PricingTiers;
   description: string; image_url: string | null; is_available: boolean;
   like_count: number; avg_rating: number; review_count: number; display_order: number;
+}
+
+/** Render compact pricing display for the dashboard card */
+function PriceDisplay({ item }: { item: MenuItem }) {
+  const p = item.pricing;
+  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+    return <p style={{ fontWeight: 700, color: 'var(--db-text)', flexShrink: 0, fontSize: '0.97rem' }}>{formatPrice(item.price)}</p>;
+  }
+  const tiers: { label: string; value: number }[] = [];
+  if (p.full !== undefined) tiers.push({ label: 'Full', value: p.full });
+  if (p.half !== undefined) tiers.push({ label: 'Half', value: p.half });
+  if (p.qtr !== undefined) tiers.push({ label: 'Qtr', value: p.qtr });
+  if (p.piece !== undefined) tiers.push({ label: 'Pc', value: p.piece });
+  if (tiers.length === 1) {
+    const suffix = p.piece !== undefined ? '/pc' : '';
+    return <p style={{ fontWeight: 700, color: 'var(--db-text)', flexShrink: 0, fontSize: '0.97rem' }}>{formatPrice(tiers[0].value)}{suffix}</p>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end', flexShrink: 0 }}>
+      {tiers.map((t) => (
+        <span key={t.label} style={{ fontSize: '0.75rem', color: 'var(--db-text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--db-text-muted)', fontWeight: 400, fontSize: '0.7rem' }}>{t.label} </span>
+          {formatPrice(t.value)}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 interface Category { id: string; name: string; display_order: number; }
@@ -263,7 +298,7 @@ function MenuContent() {
                         <p style={{ fontSize: '0.75rem', color: 'var(--db-accent)', marginBottom: 2 }}>{item.category}</p>
                         <p style={{ fontSize: '0.78rem', color: 'var(--db-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</p>
                       </div>
-                      <p style={{ fontWeight: 700, color: 'var(--db-text)', flexShrink: 0, fontSize: '0.97rem' }}>{formatPrice(item.price)}</p>
+                      <PriceDisplay item={item} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#dc2626' }}>
