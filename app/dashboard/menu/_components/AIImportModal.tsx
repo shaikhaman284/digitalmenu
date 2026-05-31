@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { resizeImage } from '@/lib/utils';
-import type { Category, MenuItemDraft } from '@/types';
+import type { Category, MenuItemDraft, PricingTiers } from '@/types';
 import { Upload, Wand2, Plus, Trash2, CheckCircle } from 'lucide-react';
 
 interface Props {
@@ -21,8 +21,26 @@ const MAX_IMPORTS_PER_MONTH = 5;
 
 const stepLabels = ['Upload Photos', 'Extracting…', 'Review & Edit', 'Done!'];
 
+/** Compute base price from pricing tiers */
+function basePriceFromTiers(pricing?: PricingTiers): number {
+  if (!pricing) return 0;
+  return pricing.full ?? pricing.half ?? pricing.qtr ?? pricing.piece ?? 0;
+}
+
+/** Render compact pricing label for a draft item */
+function pricingLabel(item: MenuItemDraft): string {
+  const p = item.pricing;
+  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) return item.price > 0 ? `₹${item.price}` : '—';
+  const parts: string[] = [];
+  if (p.full !== undefined) parts.push(`F:${p.full}`);
+  if (p.half !== undefined) parts.push(`H:${p.half}`);
+  if (p.qtr !== undefined) parts.push(`Q:${p.qtr}`);
+  if (p.piece !== undefined) parts.push(`${p.piece}/pc`);
+  return parts.join(' · ') || '—';
+}
+
 export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, categories }: Props) {
-  const { success, error: toastError, info } = useToast();
+  const { success, error: toastError } = useToast();
   const [step, setStep] = useState<Step>(1);
   const [photos, setPhotos] = useState<File[]>([]);
   const [extracting, setExtracting] = useState(false);
@@ -31,7 +49,10 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
   const [importCount, setImportCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleClose() { setStep(1); setPhotos([]); setItems([]); onClose(); }
+  // Which item row is being expanded for pricing edit
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  function handleClose() { setStep(1); setPhotos([]); setItems([]); setExpandedRow(null); onClose(); }
 
   async function handleExtract() {
     if (photos.length === 0) { toastError('Please upload at least one photo'); return; }
@@ -45,7 +66,6 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
     try {
       const allItems: MenuItemDraft[] = [];
       for (const photo of photos) {
-        info(`Extracting from ${photo.name}...`);
         const base64 = await resizeImage(photo, 1024);
         const res = await fetch('/api/extract-menu', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -63,28 +83,15 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
         seen.add(key); return true;
       });
 
-      const withDescriptions = await Promise.all(
-        deduped.map(async (item) => {
-          if (!item.description.trim()) {
-            const res = await fetch('/api/generate-description', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: item.name, category: item.category }),
-            });
-            const data = await res.json();
-            return { ...item, description: data.description || '' };
-          }
-          return item;
-        })
-      );
-
+      // Descriptions are generated inline by the vision model — no post-extraction loop needed.
       await fetch('/api/dashboard/ai-import-count', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ restaurantId }),
       });
       setImportCount(count + 1);
-      setItems(withDescriptions);
+      setItems(deduped);
       setStep(3);
-      success(`Extracted ${withDescriptions.length} items!`);
+      success(`Extracted ${deduped.length} items!`);
     } catch (err) {
       toastError(err instanceof Error ? err.message : 'Failed to extract menu');
     } finally {
@@ -95,8 +102,28 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
   function updateItem(index: number, field: keyof MenuItemDraft, value: string | number) {
     setItems((prev) => { const updated = [...prev]; updated[index] = { ...updated[index], [field]: value }; return updated; });
   }
+
+  function updatePricingField(index: number, tier: keyof PricingTiers, value: string) {
+    setItems((prev) => {
+      const updated = [...prev];
+      const currentPricing = updated[index].pricing ?? {};
+      const numVal = parseFloat(value);
+      const newPricing: PricingTiers = { ...currentPricing };
+      if (!value || isNaN(numVal)) {
+        delete newPricing[tier];
+      } else {
+        newPricing[tier] = numVal;
+      }
+      const basePrice = basePriceFromTiers(newPricing);
+      updated[index] = { ...updated[index], pricing: newPricing, price: basePrice };
+      return updated;
+    });
+  }
+
   function removeItem(index: number) { setItems((prev) => prev.filter((_, i) => i !== index)); }
-  function addEmptyRow() { setItems((prev) => [...prev, { name: '', category: categories[0]?.name || 'General', price: 0, description: '' }]); }
+  function addEmptyRow() {
+    setItems((prev) => [...prev, { name: '', category: categories[0]?.name || 'General', price: 0, pricing: { full: 0 }, description: '' }]);
+  }
 
   async function handleSaveAll() {
     const validItems = items.filter((i) => i.name.trim() && i.price >= 0);
@@ -106,7 +133,22 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
       await Promise.all(validItems.map((item, index) =>
         fetch('/api/dashboard/menu', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'add', data: { name: item.name.trim(), category: item.category || 'General', price: Number(item.price), description: item.description, image_url: null, is_available: true, like_count: 0, avg_rating: 0, review_count: 0, display_order: Date.now() + index } }),
+          body: JSON.stringify({
+            action: 'add',
+            data: {
+              name: item.name.trim(),
+              category: item.category || 'General',
+              price: Number(item.price),
+              pricing: item.pricing ?? { full: Number(item.price) },
+              description: item.description,
+              image_url: null,
+              is_available: true,
+              like_count: 0,
+              avg_rating: 0,
+              review_count: 0,
+              display_order: Date.now() + index,
+            },
+          }),
         })
       ));
 
@@ -125,6 +167,23 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
   }
 
   const remainingImports = MAX_IMPORTS_PER_MONTH - importCount;
+
+  const cellStyle: React.CSSProperties = { padding: '6px 8px', verticalAlign: 'top' };
+  const inlineInputStyle: React.CSSProperties = {
+    width: '100%',
+    background: 'transparent',
+    color: 'var(--db-text)',
+    border: 'none',
+    borderBottom: '1.5px solid var(--db-border)',
+    outline: 'none',
+    padding: '3px 0',
+    fontSize: '0.82rem',
+  };
+  const priceTierInputStyle: React.CSSProperties = {
+    ...inlineInputStyle,
+    width: 54,
+    textAlign: 'right',
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="AI Import from Photo" size="xl">
@@ -154,7 +213,7 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
       {step === 1 && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: '0.875rem', color: 'var(--db-text-2)' }}>
-            Upload photos of your existing menu (up to 5). Our AI will extract all items automatically.
+            Upload photos of your existing menu (up to 5). Our AI will extract all items and their pricing tiers (Full/Half/Qtr) automatically.
             <span style={{ display: 'block', marginTop: 4, fontSize: '0.8rem', color: 'var(--db-text-muted)' }}>
               Imports remaining this month: <strong style={{ color: remainingImports <= 0 ? 'var(--db-red)' : 'var(--db-green)' }}>{remainingImports <= 0 ? '0 (limit reached)' : remainingImports}</strong>
             </span>
@@ -211,13 +270,26 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
             <Button variant="outline" size="sm" leftIcon={<Plus size={13} />} onClick={addEmptyRow}>Add Row</Button>
           </div>
 
+          {/* Pricing legend */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--db-text-muted)' }}>
+            <span style={{ fontWeight: 600 }}>Price columns:</span>
+            <span>Full = full plate</span>
+            <span>·</span>
+            <span>Half = half plate</span>
+            <span>·</span>
+            <span>Qtr = quarter plate</span>
+            <span>·</span>
+            <span>Pc = per piece</span>
+            <span style={{ color: 'var(--db-text-muted)', fontStyle: 'italic' }}>(leave blank if not applicable)</span>
+          </div>
+
           {/* Table */}
-          <div style={{ overflowX: 'auto', maxHeight: 320, overflowY: 'auto', borderRadius: 12, border: '1px solid var(--db-border)' }}>
-            <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
+          <div style={{ overflowX: 'auto', maxHeight: 380, overflowY: 'auto', borderRadius: 12, border: '1px solid var(--db-border)' }}>
+            <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--db-surface-2)', position: 'sticky', top: 0, zIndex: 1 }}>
-                  {['Name', 'Category', 'Price (₹)', 'Description', ''].map((h) => (
-                    <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
+                  {['Name', 'Category', 'Full ₹', 'Half ₹', 'Qtr ₹', 'Pc ₹', 'Description', ''].map((h) => (
+                    <th key={h} style={{ textAlign: h === 'Full ₹' || h === 'Half ₹' || h === 'Qtr ₹' || h === 'Pc ₹' ? 'right' : 'left', padding: '8px 8px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -226,31 +298,65 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
                   <tr key={i} style={{ borderTop: '1px solid var(--db-border)' }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--db-surface-2)'; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ''; }}>
-                    <td style={{ padding: '6px 10px' }}>
+                    <td style={cellStyle}>
                       <input value={item.name} onChange={(e) => updateItem(i, 'name', e.target.value)}
-                        style={{ width: '100%', minWidth: 100, background: 'transparent', color: 'var(--db-text)', border: 'none', borderBottom: '1.5px solid var(--db-border)', outline: 'none', padding: '3px 0', fontSize: '0.875rem' }}
+                        style={{ ...inlineInputStyle, minWidth: 100 }}
                         onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
                         onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
                     </td>
-                    <td style={{ padding: '6px 10px' }}>
+                    <td style={cellStyle}>
                       <input value={item.category} onChange={(e) => updateItem(i, 'category', e.target.value)}
-                        style={{ width: '100%', minWidth: 80, background: 'transparent', color: 'var(--db-text)', border: 'none', borderBottom: '1.5px solid var(--db-border)', outline: 'none', padding: '3px 0', fontSize: '0.875rem' }}
+                        style={{ ...inlineInputStyle, minWidth: 80 }}
                         onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
                         onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
                     </td>
-                    <td style={{ padding: '6px 10px' }}>
-                      <input type="number" value={item.price} onChange={(e) => updateItem(i, 'price', parseFloat(e.target.value) || 0)}
-                        style={{ width: 72, background: 'transparent', color: 'var(--db-text)', border: 'none', borderBottom: '1.5px solid var(--db-border)', outline: 'none', padding: '3px 0', fontSize: '0.875rem' }}
+                    {/* Full */}
+                    <td style={{ ...cellStyle, textAlign: 'right' }}>
+                      <input type="number" min="0"
+                        value={item.pricing?.full !== undefined ? item.pricing.full : (item.price > 0 && !item.pricing?.half && !item.pricing?.qtr && !item.pricing?.piece ? item.price : '')}
+                        onChange={(e) => updatePricingField(i, 'full', e.target.value)}
+                        placeholder="—"
+                        style={priceTierInputStyle}
                         onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
                         onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
                     </td>
-                    <td style={{ padding: '6px 10px' }}>
+                    {/* Half */}
+                    <td style={{ ...cellStyle, textAlign: 'right' }}>
+                      <input type="number" min="0"
+                        value={item.pricing?.half !== undefined ? item.pricing.half : ''}
+                        onChange={(e) => updatePricingField(i, 'half', e.target.value)}
+                        placeholder="—"
+                        style={priceTierInputStyle}
+                        onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
+                        onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
+                    </td>
+                    {/* Qtr */}
+                    <td style={{ ...cellStyle, textAlign: 'right' }}>
+                      <input type="number" min="0"
+                        value={item.pricing?.qtr !== undefined ? item.pricing.qtr : ''}
+                        onChange={(e) => updatePricingField(i, 'qtr', e.target.value)}
+                        placeholder="—"
+                        style={priceTierInputStyle}
+                        onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
+                        onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
+                    </td>
+                    {/* Per Piece */}
+                    <td style={{ ...cellStyle, textAlign: 'right' }}>
+                      <input type="number" min="0"
+                        value={item.pricing?.piece !== undefined ? item.pricing.piece : ''}
+                        onChange={(e) => updatePricingField(i, 'piece', e.target.value)}
+                        placeholder="—"
+                        style={priceTierInputStyle}
+                        onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
+                        onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
+                    </td>
+                    <td style={cellStyle}>
                       <input value={item.description} onChange={(e) => updateItem(i, 'description', e.target.value)}
-                        style={{ width: '100%', minWidth: 200, background: 'transparent', color: 'var(--db-text)', border: 'none', borderBottom: '1.5px solid var(--db-border)', outline: 'none', padding: '3px 0', fontSize: '0.875rem' }}
+                        style={{ ...inlineInputStyle, minWidth: 160 }}
                         onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
                         onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
                     </td>
-                    <td style={{ padding: '6px 10px' }}>
+                    <td style={cellStyle}>
                       <button onClick={() => removeItem(i)}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, color: 'var(--db-text-muted)', transition: 'color 0.15s' }}
                         onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-red)'}

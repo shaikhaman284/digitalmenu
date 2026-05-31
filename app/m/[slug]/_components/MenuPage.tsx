@@ -2,16 +2,137 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
-import { Heart, MapPin, Star, MessageSquare, Search, Flame, X, ChevronDown } from 'lucide-react';
-import { getVisitorToken, formatPrice, getCategoryIcon } from '@/lib/utils';
+import { Heart, MapPin, Star, MessageSquare, Search, Flame, X } from 'lucide-react';
+import { getVisitorToken, getCategoryIcon } from '@/lib/utils';
 import { ReviewSheet } from './ReviewSheet';
-import type { Restaurant, MenuItem, Category } from '@/types';
+import type { Restaurant, MenuItem, Category, PricingTiers } from '@/types';
 
 interface Props {
   restaurant: Restaurant;
   categories: Category[];
   initialItems: MenuItem[];
 }
+
+// ─── Pricing helpers ──────────────────────────────────────────────────────────
+
+/** Returns the base (lowest / first defined) price for sorting/display fallback */
+function basePrice(item: MenuItem): number {
+  const p = item.pricing;
+  if (!p) return item.price;
+  return p.full ?? p.half ?? p.qtr ?? p.piece ?? item.price;
+}
+
+/** Render pricing tiers as compact inline badges for item cards */
+function PriceBadges({ item, size = 'md' }: { item: MenuItem; size?: 'sm' | 'md' }) {
+  const p = item.pricing;
+  const fontSize = size === 'sm' ? '0.78rem' : '0.88rem';
+  const labelSize = size === 'sm' ? '0.65rem' : '0.72rem';
+  const priceColor = '#c8622a';
+  const labelColor = '#9c8e7a';
+
+  // No pricing object OR all tiers absent → show legacy single price
+  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+    return (
+      <span style={{ fontWeight: 700, fontSize, color: priceColor }}>
+        ₹{item.price}
+      </span>
+    );
+  }
+
+  const tiers: { label: string; value: number }[] = [];
+  if (p.full !== undefined) tiers.push({ label: 'Full', value: p.full });
+  if (p.half !== undefined) tiers.push({ label: 'Half', value: p.half });
+  if (p.qtr !== undefined) tiers.push({ label: 'Qtr', value: p.qtr });
+  if (p.piece !== undefined) tiers.push({ label: '/pc', value: p.piece });
+
+  if (tiers.length === 1) {
+    const suffix = p.piece !== undefined ? '/pc' : '';
+    return (
+      <span style={{ fontWeight: 700, fontSize, color: priceColor }}>
+        ₹{tiers[0].value}{suffix}
+      </span>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      {tiers.map((t) => (
+        <span key={t.label} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
+          <span style={{ fontSize: labelSize, color: labelColor, fontWeight: 500 }}>{t.label}</span>
+          <span style={{ fontSize, fontWeight: 700, color: priceColor }}>₹{t.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Full pricing table for item detail modal */
+function PricingTable({ item }: { item: MenuItem }) {
+  const p = item.pricing;
+
+  // Single price fallback
+  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+    return (
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: '#fff8f0', border: '1.5px solid #f5d0a0',
+        borderRadius: 12, padding: '8px 16px',
+      }}>
+        <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#c8622a' }}>₹{item.price}</span>
+      </div>
+    );
+  }
+
+  const tiers: { label: string; sublabel: string; value: number }[] = [];
+  if (p.full !== undefined) tiers.push({ label: 'Full', sublabel: 'Full plate', value: p.full });
+  if (p.half !== undefined) tiers.push({ label: 'Half', sublabel: 'Half plate', value: p.half });
+  if (p.qtr !== undefined) tiers.push({ label: 'Qtr', sublabel: 'Quarter plate', value: p.qtr });
+  if (p.piece !== undefined) tiers.push({ label: 'Per Piece', sublabel: 'Each piece', value: p.piece });
+
+  if (tiers.length === 1) {
+    const suffix = p.piece !== undefined ? '/pc' : '';
+    return (
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: '#fff8f0', border: '1.5px solid #f5d0a0',
+        borderRadius: 12, padding: '8px 16px',
+      }}>
+        <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#c8622a' }}>₹{tiers[0].value}{suffix}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display: 'flex', gap: 0,
+      border: '1.5px solid #ece7dc',
+      borderRadius: 14,
+      overflow: 'hidden',
+    }}>
+      {tiers.map((t, idx) => (
+        <div
+          key={t.label}
+          style={{
+            flex: 1,
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            padding: '10px 8px',
+            background: idx % 2 === 0 ? '#fff8f0' : '#fdfaf5',
+            borderRight: idx < tiers.length - 1 ? '1px solid #ece7dc' : 'none',
+          }}
+        >
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#9c8e7a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+            {t.label}
+          </span>
+          <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#c8622a' }}>
+            ₹{t.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export function MenuPage({ restaurant, categories, initialItems }: Props) {
   const [items, setItems] = useState<MenuItem[]>(initialItems);
@@ -224,7 +345,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                 <h3 style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1c1611', marginBottom: 2, fontFamily: 'var(--mf-heading-font)' }}>{mostLoved.name}</h3>
                 <p style={{ fontSize: '0.78rem', color: '#9c8e7a', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 }}>{mostLoved.description}</p>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: '1rem', color: '#c8622a' }}>{formatPrice(mostLoved.price)}</span>
+                  <PriceBadges item={mostLoved} size="sm" />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fff0f0', border: '1px solid #fcc', borderRadius: 999, padding: '3px 10px' }}>
                     <Heart size={12} style={{ fill: '#e74c3c', color: '#e74c3c' }} />
                     <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e74c3c' }}>{mostLoved.like_count}</span>
@@ -299,7 +420,9 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                       <h3 style={{ fontWeight: 600, fontSize: '0.97rem', color: '#1c1611', lineHeight: 1.25, fontFamily: 'var(--mf-heading-font)' }}>{item.name}</h3>
-                      <span style={{ fontWeight: 700, fontSize: '0.97rem', color: '#c8622a', flexShrink: 0 }}>{formatPrice(item.price)}</span>
+                      <div style={{ flexShrink: 0 }}>
+                        <PriceBadges item={item} />
+                      </div>
                     </div>
 
                     <p style={{ fontSize: '0.78rem', color: '#9c8e7a', marginTop: 3, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
@@ -410,7 +533,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
               const isLiking = likingIds.has(modalItem.id);
               return (
                 <>
-                  {/* Image hero — objectFit: contain ensures the full image is shown */}
+                  {/* Image hero */}
                   <div style={{
                     position: 'relative',
                     width: '100%',
@@ -457,17 +580,15 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
 
                   {/* Content */}
                   <div style={{ overflowY: 'auto', padding: '20px 20px 32px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {/* Name + price */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                      <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#1c1611', lineHeight: 1.2, fontFamily: 'var(--mf-heading-font)', flex: 1 }}>
-                        {modalItem.name}
-                      </h2>
-                      <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#c8622a', flexShrink: 0 }}>
-                        {formatPrice(modalItem.price)}
-                      </span>
-                    </div>
+                    {/* Name */}
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#1c1611', lineHeight: 1.2, fontFamily: 'var(--mf-heading-font)' }}>
+                      {modalItem.name}
+                    </h2>
 
-                    {/* Category badge */}
+                    {/* Pricing table */}
+                    <PricingTable item={modalItem} />
+
+                    {/* Category badge + availability */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', gap: 4,

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://digitalmenu-inky-theta.vercel.app';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.themenuqr.food';
+
 
 /**
  * sitemap.xml — tells Google which pages to crawl.
