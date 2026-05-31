@@ -40,7 +40,7 @@ function pricingLabel(item: MenuItemDraft): string {
 }
 
 export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, categories }: Props) {
-  const { success, error: toastError, info } = useToast();
+  const { success, error: toastError } = useToast();
   const [step, setStep] = useState<Step>(1);
   const [photos, setPhotos] = useState<File[]>([]);
   const [extracting, setExtracting] = useState(false);
@@ -84,28 +84,15 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
         seen.add(key); return true;
       });
 
-      const withDescriptions = await Promise.all(
-        deduped.map(async (item) => {
-          if (!item.description.trim()) {
-            const res = await fetch('/api/generate-description', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: item.name, category: item.category }),
-            });
-            const data = await res.json();
-            return { ...item, description: data.description || '' };
-          }
-          return item;
-        })
-      );
-
+      // Descriptions are generated inline by the vision model — no post-extraction loop needed.
       await fetch('/api/dashboard/ai-import-count', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ restaurantId }),
       });
       setImportCount(count + 1);
-      setItems(withDescriptions);
+      setItems(deduped);
       setStep(3);
-      success(`Extracted ${withDescriptions.length} items!`);
+      success(`Extracted ${deduped.length} items!`);
     } catch (err) {
       toastError(err instanceof Error ? err.message : 'Failed to extract menu');
     } finally {

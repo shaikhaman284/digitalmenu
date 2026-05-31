@@ -132,46 +132,45 @@ OUTPUT FORMAT: Return ONLY a raw JSON array — no markdown, no explanation, no 
 Start your response with [ and end with ].
 
 Each element must be a JSON object with exactly these keys:
-  "name"        – string: the dish name as written
-  "category"    – string: the section heading this item belongs to (e.g. "Non Veg Starters", "Breads", "Rice", "Pure Veg", "Raita", "Roomali Rolls", etc.)
-  "pricing"     – object: include ONLY the price tier keys that are present for this item:
-                    "full"  (number) – price for a full plate/serving
-                    "half"  (number) – price for a half plate
-                    "qtr"   (number) – price for a quarter plate
-                    "piece" (number) – price per individual piece
-  "description" – string: empty string "" if not shown in the menu
+  "name"        – string: the dish name exactly as written in the image
+  "category"    – string: the section heading this item belongs to (e.g. "Non Veg Starters", "Breads", "Rice", "Pure Veg", "Raita", "Roomali Rolls")
+  "pricing"     – object: include ONLY the price tier keys visible for this item:
+                    "full"  (number) – full plate/serving price
+                    "half"  (number) – half plate price
+                    "qtr"   (number) – quarter plate price
+                    "piece" (number) – per piece price
+  "description" – string: a short appetising one-line description of max 12 words.
+                  If a description is printed in the image, use it.
+                  If not, write one yourself based on the item name and category.
+                  Never leave this empty.
 
-STEP 1 — Read column headers:
-  Look at the column headers printed above each price column (e.g. FULL, HALF, QTR.).
-  Map each price number to the column header directly above it.
-  Use "full", "half", "qtr", or "piece" accordingly.
-
-STEP 2 — Single unlabeled price rule:
-  If an item has only ONE price and NO column header above it, choose the key based on the item's category:
-  • Use "piece" for: Breads, Roti, Naan, Parantha, Raita, individual bread/condiment items
-  • Use "full"  for: everything else (starters, curries, rice, rolls, biryani, etc.)
-
-STEP 3 — Never invent prices. Only extract numbers actually printed in the image.
+PRICING RULES:
+  STEP 1 — Read column headers (FULL, HALF, QTR) printed in the image and map each price to its column key.
+  STEP 2 — Single unlabeled price: use "piece" for Breads/Roti/Naan/Parantha/Raita; use "full" for everything else.
+  STEP 3 — Never invent prices. Only include numbers actually printed in the image.
 
 Examples:
-[{"name":"Butter Chicken","category":"Non Veg Starters","pricing":{"full":500,"half":300,"qtr":200},"description":""},
- {"name":"Tandoori Roti","category":"Breads","pricing":{"piece":15},"description":""},
- {"name":"Butter Naan","category":"Breads","pricing":{"piece":40},"description":""},
- {"name":"Boondi Raita","category":"Raita","pricing":{"piece":100},"description":""},
- {"name":"Chicken Biryani","category":"Rice","pricing":{"full":200},"description":""}]
+[{"name":"Butter Chicken","category":"Non Veg Starters","pricing":{"full":500,"half":300,"qtr":200},"description":"Tender chicken in rich, velvety tomato-butter gravy"},
+ {"name":"Tandoori Roti","category":"Breads","pricing":{"piece":15},"description":"Freshly baked whole-wheat bread from the clay oven"},
+ {"name":"Butter Naan","category":"Breads","pricing":{"piece":40},"description":"Soft leavened bread brushed with golden butter"},
+ {"name":"Boondi Raita","category":"Raita","pricing":{"piece":100},"description":"Cool yoghurt tempered with roasted cumin and boondi"},
+ {"name":"Chicken Biryani","category":"Rice","pricing":{"full":200},"description":"Aromatic basmati rice slow-cooked with spiced chicken"}]
 
 Now extract ALL items from the image:`
     : `You are extracting items from an Indian restaurant menu image.
 Return ONLY a JSON array (start with [, end with ]). No markdown, no explanation.
 
-Each object: { "name": string, "category": string, "pricing": object, "description": string }
-
-For "pricing", use these rules:
-1. Read the column headers in the image (FULL / HALF / QTR / PIECE) and map prices to those exact keys: "full", "half", "qtr", "piece".
-2. If an item has a single price with NO column header:
-   - Use "piece" for breads, roti, naan, parantha, raita, and similar individual items.
-   - Use "full" for all other items (starters, curries, rice, biryani, rolls, etc.).
-3. Only include the tiers that are actually printed for each item. Never guess or add extra tiers.`;
+Each object must have:
+  "name"     – string: dish name as written
+  "category" – string: section heading (e.g. "Non Veg Starters", "Breads", "Rice", "Pure Veg", "Raita")
+  "pricing"  – object with only the tiers visible in the image:
+               • "full" / "half" / "qtr" — read from column headers; map each price to its header key
+               • "piece" — use for Breads/Roti/Naan/Parantha/Raita with a single unlabeled price
+               • "full" — use for everything else with a single unlabeled price
+               Never invent prices; include only numbers printed in the image.
+  "description" – string: max 12-word appetising one-liner.
+                  Use the description printed in the image if present.
+                  Otherwise write one based on the item name. Never leave empty.`;
 
   const response = await groq.chat.completions.create({
     model: 'meta-llama/llama-4-scout-17b-16e-instruct',
