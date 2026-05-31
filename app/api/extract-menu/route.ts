@@ -126,30 +126,52 @@ async function extractWithGroq(imageBase64: string, strict = false): Promise<Men
   const groq = getGroqClient();
 
   const prompt = strict
-    ? `You are a menu data extractor. Look at this menu image carefully and extract every single item.
+    ? `You are a precise menu data extractor for Indian restaurant menus.
 
 OUTPUT FORMAT: Return ONLY a raw JSON array — no markdown, no explanation, no code fences.
 Start your response with [ and end with ].
 
-Each element in the array must be a JSON object with these exact keys:
-  "name"        – string, the dish name
-  "category"    – string, e.g. "Non Veg Starters", "Breads", "Rice", "Pure Veg", etc.
-  "pricing"     – object containing only the price tiers visible in the image:
-                    "full"  (number) – full plate price
-                    "half"  (number) – half plate price
-                    "qtr"   (number) – quarter plate price
-                    "piece" (number) – per piece price
-                  Include only the tiers that appear in the image. If there is just one price with no label, use "full".
-  "description" – string, empty string "" if not shown
+Each element must be a JSON object with exactly these keys:
+  "name"        – string: the dish name as written
+  "category"    – string: the section heading this item belongs to (e.g. "Non Veg Starters", "Breads", "Rice", "Pure Veg", "Raita", "Roomali Rolls", etc.)
+  "pricing"     – object: include ONLY the price tier keys that are present for this item:
+                    "full"  (number) – price for a full plate/serving
+                    "half"  (number) – price for a half plate
+                    "qtr"   (number) – price for a quarter plate
+                    "piece" (number) – price per individual piece
+  "description" – string: empty string "" if not shown in the menu
 
-Example:
-[{"name":"Butter Chicken","category":"Non Veg Starters","pricing":{"full":500,"half":300,"qtr":200},"description":""},{"name":"Tandoori Roti","category":"Breads","pricing":{"full":15},"description":""}]
+STEP 1 — Read column headers:
+  Look at the column headers printed above each price column (e.g. FULL, HALF, QTR.).
+  Map each price number to the column header directly above it.
+  Use "full", "half", "qtr", or "piece" accordingly.
 
-Now extract all items:`
-    : `Extract all menu items from this image.
-Return ONLY a JSON array (start with [, end with ]), no markdown, no explanation.
-Each object: { "name": string, "category": string, "pricing": { "full"?: number, "half"?: number, "qtr"?: number, "piece"?: number }, "description": string }
-Use only the price tiers visible in the image. Single price → use "full".`;
+STEP 2 — Single unlabeled price rule:
+  If an item has only ONE price and NO column header above it, choose the key based on the item's category:
+  • Use "piece" for: Breads, Roti, Naan, Parantha, Raita, individual bread/condiment items
+  • Use "full"  for: everything else (starters, curries, rice, rolls, biryani, etc.)
+
+STEP 3 — Never invent prices. Only extract numbers actually printed in the image.
+
+Examples:
+[{"name":"Butter Chicken","category":"Non Veg Starters","pricing":{"full":500,"half":300,"qtr":200},"description":""},
+ {"name":"Tandoori Roti","category":"Breads","pricing":{"piece":15},"description":""},
+ {"name":"Butter Naan","category":"Breads","pricing":{"piece":40},"description":""},
+ {"name":"Boondi Raita","category":"Raita","pricing":{"piece":100},"description":""},
+ {"name":"Chicken Biryani","category":"Rice","pricing":{"full":200},"description":""}]
+
+Now extract ALL items from the image:`
+    : `You are extracting items from an Indian restaurant menu image.
+Return ONLY a JSON array (start with [, end with ]). No markdown, no explanation.
+
+Each object: { "name": string, "category": string, "pricing": object, "description": string }
+
+For "pricing", use these rules:
+1. Read the column headers in the image (FULL / HALF / QTR / PIECE) and map prices to those exact keys: "full", "half", "qtr", "piece".
+2. If an item has a single price with NO column header:
+   - Use "piece" for breads, roti, naan, parantha, raita, and similar individual items.
+   - Use "full" for all other items (starters, curries, rice, biryani, rolls, etc.).
+3. Only include the tiers that are actually printed for each item. Never guess or add extra tiers.`;
 
   const response = await groq.chat.completions.create({
     model: 'meta-llama/llama-4-scout-17b-16e-instruct',
