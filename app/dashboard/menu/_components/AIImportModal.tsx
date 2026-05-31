@@ -66,7 +66,6 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
     try {
       const allItems: MenuItemDraft[] = [];
       for (const photo of photos) {
-        info(`Extracting from ${photo.name}...`);
         const base64 = await resizeImage(photo, 1024);
         const res = await fetch('/api/extract-menu', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
