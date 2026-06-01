@@ -188,12 +188,12 @@ function MenuContent() {
       <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 96 }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div className="db-menu-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ fontSize: '1.7rem', fontWeight: 700, color: 'var(--db-text)', marginBottom: 2 }}>Menu</h1>
             <p style={{ fontSize: '0.85rem', color: 'var(--db-text-muted)' }}>{items.length} items across {categoryNames.length} categories</p>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="db-menu-toolbar-actions" style={{ display: 'flex', gap: 10 }}>
             <Button variant="outline" leftIcon={<Camera size={15} />} onClick={() => setShowAIModal(true)}>Import from Photo</Button>
             <Button leftIcon={<Plus size={15} />} onClick={() => { setEditingItem(null); setShowAddModal(true); }}>Add Item</Button>
           </div>
@@ -262,7 +262,7 @@ function MenuContent() {
               return (
                 <div
                   key={item.id}
-                  className="db-card db-card-hover"
+                  className="db-card db-card-hover db-menu-item-card"
                   style={{
                     padding: '14px 16px',
                     display: 'flex',
@@ -270,20 +270,18 @@ function MenuContent() {
                     opacity: item.is_available ? 1 : 0.65,
                     outline: isSelected ? '2px solid var(--db-accent)' : 'none',
                     outlineOffset: 1,
+                    flexWrap: 'wrap',
                   }}
                 >
                   {/* Checkbox */}
                   <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                    <div
-                      onClick={() => toggleSelect(item.id)}
-                      className={`db-checkbox${isSelected ? ' checked' : ''}`}
-                    >
+                    <div onClick={() => toggleSelect(item.id)} className={`db-checkbox${isSelected ? ' checked' : ''}`}>
                       {isSelected && <Check size={11} style={{ color: '#fff' }} />}
                     </div>
                   </div>
 
                   {/* Image */}
-                  <div style={{ width: 64, height: 64, borderRadius: 12, overflow: 'hidden', background: 'var(--db-surface-2)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="db-menu-item-img" style={{ width: 64, height: 64, borderRadius: 12, overflow: 'hidden', background: 'var(--db-surface-2)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {item.image_url
                       ? <Image src={item.image_url} alt={item.name} width={64} height={64} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
                       : <span style={{ fontSize: 26 }}>{getCategoryIcon(item.category)}</span>
@@ -310,31 +308,17 @@ function MenuContent() {
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
-                    <button
-                      onClick={() => handleToggle(item)}
-                      title={item.is_available ? 'Mark unavailable' : 'Mark available'}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, padding: 4 }}
-                    >
+                  <div className="db-menu-card-actions" style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+                    <button onClick={() => handleToggle(item)} title={item.is_available ? 'Mark unavailable' : 'Mark available'} style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, padding: 4 }}>
                       {item.is_available
                         ? <ToggleRight size={22} style={{ color: 'var(--db-green)' }} />
                         : <ToggleLeft  size={22} style={{ color: 'var(--db-text-muted)' }} />
                       }
                     </button>
-                    <button
-                      onClick={() => { setEditingItem(item); setShowAddModal(true); }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, padding: 4, color: 'var(--db-text-muted)', transition: 'color 0.15s' }}
-                      onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-accent)'}
-                      onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-text-muted)'}
-                    >
+                    <button onClick={() => { setEditingItem(item); setShowAddModal(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, padding: 4, color: 'var(--db-text-muted)', transition: 'color 0.15s' }} onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-accent)'} onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-text-muted)'}>
                       <Pencil size={15} />
                     </button>
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, padding: 4, color: 'var(--db-text-muted)', transition: 'color 0.15s' }}
-                      onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-red)'}
-                      onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-text-muted)'}
-                    >
+                    <button onClick={() => handleDelete(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, padding: 4, color: 'var(--db-text-muted)', transition: 'color 0.15s' }} onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-red)'} onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--db-text-muted)'}>
                       <Trash2 size={15} />
                     </button>
                   </div>

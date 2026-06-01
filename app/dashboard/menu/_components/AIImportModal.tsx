@@ -130,14 +130,26 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
     if (validItems.length === 0) { toastError('No valid items to save'); return; }
     setSaving(true);
     try {
-      await Promise.all(validItems.map((item, index) =>
+      // Build a lookup map: lowercase name → canonical name already in Firestore
+      // This ensures the category string on each item EXACTLY matches the Firestore
+      // category document name so the === comparison in the categories API finds them.
+      const existingCatMap = new Map(categories.map((c) => [c.name.toLowerCase().trim(), c.name]));
+
+      // Normalise each item's category to the existing canonical name if one exists
+      const normalizedItems = validItems.map((item) => {
+        const raw = (item.category || 'General').trim();
+        const canonical = existingCatMap.get(raw.toLowerCase()) ?? raw;
+        return { ...item, category: canonical };
+      });
+
+      await Promise.all(normalizedItems.map((item, index) =>
         fetch('/api/dashboard/menu', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'add',
             data: {
               name: item.name.trim(),
-              category: item.category || 'General',
+              category: item.category,
               price: Number(item.price),
               pricing: item.pricing ?? { full: Number(item.price) },
               description: item.description,
@@ -152,8 +164,9 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
         })
       ));
 
-      const existingCatNames = new Set(categories.map((c) => c.name.toLowerCase()));
-      const newCatNames = [...new Set(validItems.map((i) => i.category || 'General'))].filter((name) => name && !existingCatNames.has(name.toLowerCase()));
+      // Only create categories whose canonical name doesn't already exist in Firestore
+      const usedCatNames = [...new Set(normalizedItems.map((i) => i.category))];
+      const newCatNames = usedCatNames.filter((name) => name && !existingCatMap.has(name.toLowerCase().trim()));
       if (newCatNames.length > 0) {
         await Promise.all(newCatNames.map((name) =>
           fetch('/api/dashboard/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', name }) })
@@ -161,10 +174,11 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
       }
 
       setStep(4);
-      success(`${validItems.length} items saved${newCatNames.length > 0 ? ` + ${newCatNames.length} new categories created` : ''}!`);
+      success(`${normalizedItems.length} items saved${newCatNames.length > 0 ? ` + ${newCatNames.length} new categories created` : ''}!`);
     } catch { toastError('Failed to save items'); }
     finally { setSaving(false); }
   }
+
 
   const remainingImports = MAX_IMPORTS_PER_MONTH - importCount;
 
