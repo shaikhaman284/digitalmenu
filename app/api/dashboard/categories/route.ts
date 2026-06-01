@@ -31,11 +31,13 @@ export async function GET(request: NextRequest) {
     const items = itemsSnap.docs.map((d) => d.data());
     const categories = catsSnap.docs.map((d) => {
       const name = (d.data() as { name: string }).name;
+      const nameLower = name.toLowerCase().trim();
       return {
         id: d.id,
         name,
         display_order: (d.data() as { display_order: number }).display_order,
-        itemCount: items.filter((i) => (i as { category: string }).category === name).length,
+        // Case-insensitive match so minor casing differences never break the count
+        itemCount: items.filter((i) => ((i as { category: string }).category ?? '').toLowerCase().trim() === nameLower).length,
       };
     });
 

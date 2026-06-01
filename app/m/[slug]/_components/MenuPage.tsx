@@ -134,14 +134,21 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
   const mostLoved = useMemo(() => [...items].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))[0], [items]);
 
   const categoryNames = useMemo(() => {
-    const fromCats = categories.map((c) => c.name);
-    const fromItems = [...new Set(items.map((i) => i.category))];
-    return [...new Set([...fromCats, ...fromItems])];
+    // Firestore categories are canonical — use their exact names.
+    // Items may have category strings that differ only in casing; deduplicate
+    // case-insensitively so no tab appears twice in the filter bar.
+    const seen = new Map<string, string>(); // lowercase → canonical
+    for (const c of categories) seen.set(c.name.toLowerCase().trim(), c.name);
+    for (const i of items) {
+      const lower = i.category.toLowerCase().trim();
+      if (!seen.has(lower)) seen.set(lower, i.category);
+    }
+    return [...seen.values()];
   }, [categories, items]);
 
   const filteredItems = useMemo(() =>
     items.filter((item) => {
-      const matchesCat = activeCategory === 'All' || item.category === activeCategory;
+      const matchesCat = activeCategory === 'All' || item.category.toLowerCase().trim() === activeCategory.toLowerCase().trim();
       const q = searchQuery.toLowerCase();
       const matchesSearch = !q || item.name.toLowerCase().includes(q) || (item.description ?? '').toLowerCase().includes(q);
       return matchesCat && matchesSearch;
