@@ -568,12 +568,94 @@
   }
 }
 
-/* ─── Customer Menu — Safe Area Insets ──────────────────────────────────── */
 
-/* Hero: add top safe area so content clears the notch */
-.menu-theme .mf-hero-top {
-  padding-top: max(40px, calc(40px + env(safe-area-inset-top)));
+/* ─── Customer Menu — Hero Banner ───────────────────────────────────────── */
+
+/* Full-width banner wrapper */
+.mf-hero-banner {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
+
+/* Image container fills banner */
+.mf-hero-img-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Placeholder when no image */
+.mf-hero-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+  background: linear-gradient(160deg, #fff8f0 0%, #fdfaf5 100%);
+}
+
+/* Dark gradient overlay for text legibility */
+.mf-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(28,22,17,0.10) 0%,
+    rgba(28,22,17,0.42) 60%,
+    rgba(28,22,17,0.72) 100%
+  );
+}
+
+/* Text block at bottom of banner */
+.mf-hero-content {
+  position: relative;
+  padding: max(56px, calc(44px + env(safe-area-inset-top))) 20px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.mf-hero-name {
+  font-size: clamp(1.6rem, 5vw, 2.4rem);
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.1;
+  margin: 0;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.45);
+  font-family: var(--mf-heading-font);
+  letter-spacing: -0.01em;
+}
+
+.mf-hero-location {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(255,255,255,0.85);
+  font-size: 0.84rem;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+}
+
+.mf-hero-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 180px;
+  margin-top: 4px;
+}
+.mf-hero-rule-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.40);
+}
+.mf-hero-rule span { font-size: 14px; color: rgba(255,255,255,0.70); }
 
 /* Powered-by footer: add bottom safe area */
 .menu-theme .mf-footer-safe {
@@ -617,6 +699,127 @@
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* ─── Customer Menu — Item Card Layout ──────────────────────────────────── */
+
+/* Each menu item row: image left, content right */
+.mf-item-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 12px;
+  align-items: flex-start;
+}
+
+/* Square food image — bigger than before for eye-catching showcase */
+.mf-item-img {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f7f3ec;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Content area fills remaining space */
+.mf-item-body {
+  flex: 1;
+  min-width: 0;  /* key: allows text to truncate rather than push price out */
+}
+
+/* Item name — truncates to 2 lines max */
+.mf-item-name {
+  font-weight: 600;
+  font-size: 0.93rem;
+  color: #1c1611;
+  line-height: 1.25;
+  font-family: var(--mf-heading-font);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Description — 2 lines max */
+.mf-item-desc {
+  font-size: 0.77rem;
+  color: #9c8e7a;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+/* Most Loved card */
+.mf-hot-card {
+  background: linear-gradient(135deg, #fff8f0 0%, #fff3e8 100%);
+  border: 1px solid #f5d0b8;
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: box-shadow 0.18s;
+}
+.mf-hot-card:hover { box-shadow: 0 6px 24px rgba(200,98,42,0.14); }
+
+.mf-hot-img {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f7f3ec;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Dashboard Menu Page — Mobile Responsive ───────────────────────────── */
+
+@media (max-width: 600px) {
+  /* On narrow screens, collapse the action column under the info */
+  .db-menu-card-actions {
+    flex-direction: row !important;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-top: 8px;
+    border-top: 1px solid var(--db-border);
+    padding-top: 8px;
+  }
+
+  /* Tighten card padding */
+  .db-menu-item-card {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+  }
+
+  /* Shrink image slightly */
+  .db-menu-item-img {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  /* Header toolbar wraps */
+  .db-menu-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .db-menu-toolbar-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
