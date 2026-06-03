@@ -992,6 +992,15 @@
   color: var(--lp-text);
   margin-bottom: 24px;
 }
+/* SEO keyword H2 — visible but understated; above H1 so it renders early */
+.lp-hero-h2-seo {
+  font-size: clamp(0.8rem, 1.8vw, 1rem);
+  font-weight: 600;
+  color: var(--lp-accent);
+  letter-spacing: 0.02em;
+  margin-bottom: 16px;
+  opacity: 0.85;
+}
 .lp-accent-text {
   color: var(--lp-accent);
 }

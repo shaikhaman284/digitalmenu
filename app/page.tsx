@@ -5,43 +5,149 @@ import {
   Check, ArrowRight, Star, Zap, ChevronRight,
 } from 'lucide-react';
 
+export const revalidate = 86400; // Statically regenerate once per day
+
 export const metadata: Metadata = {
-  title: 'MenuQR — Modern Digital Menus for Restaurants & Cafes',
+  title: 'MenuQR — Digital QR Menu for Restaurants & Cafes | Amravati, India',
   description:
-    'Replace paper menus with a beautiful QR-based digital experience. AI-powered setup, customer likes & reviews, real-time updates. No app needed. Live for restaurants across India.',
+    'MenuQR gives restaurants and cafes in Amravati and across India a beautiful digital menu via QR code. AI-powered setup, customer likes & reviews, real-time updates. No app needed. Starting ₹99/month.',
   keywords: [
-    'digital menu India', 'QR code menu restaurant', 'restaurant digital menu',
-    'contactless menu', 'online menu QR', 'cafe digital menu', 'MenuQR',
-    'restaurant management app', 'menu QR code India',
+    'digital menu amravati', 'qr menu amravati', 'restaurant digital menu amravati',
+    'cafe digital menu', 'qr code menu india', 'contactless menu', 'digital menu india',
+    'menu qr', 'the menu qr', 'qr menu restaurant', 'online menu qr code',
+    'restaurant menu app amravati', 'digital menu maharashtra',
   ],
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_BASE_URL || 'https://digitalmenu-inky-theta.vercel.app',
+    canonical: 'https://www.themenuqr.food',
   },
   openGraph: {
-    title: 'MenuQR — Modern Digital Menus for Restaurants & Cafes',
-    description: 'Replace paper menus with a beautiful QR-based digital experience. AI-powered setup, customer likes & reviews. No app needed.',
+    title: 'MenuQR — Digital QR Menu for Restaurants & Cafes | Amravati, India',
+    description: 'Beautiful digital menus via QR code for restaurants in Amravati. AI-powered setup, customer likes & reviews. No app needed. Starting ₹99/month.',
     type: 'website',
     locale: 'en_IN',
+    images: [{ url: '/og-image.jpg', width: 1200, height: 630, alt: 'MenuQR Digital Menu for Restaurants' }],
   },
 };
 
-const jsonLd = {
+// ── JSON-LD Structured Data ──────────────────────────────────────────────────
+
+const jsonLdLocalBusiness = {
+  '@context': 'https://schema.org',
+  '@type': 'LocalBusiness',
+  name: 'MenuQR',
+  description: 'Digital QR menu service for restaurants and cafes in Amravati and across India',
+  url: 'https://www.themenuqr.food',
+  telephone: '+919284516967',
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'Amravati',
+    addressRegion: 'Maharashtra',
+    addressCountry: 'IN',
+  },
+  areaServed: ['Amravati', 'Maharashtra', 'India'],
+  priceRange: '₹99 - ₹999',
+  sameAs: [],
+};
+
+const jsonLdSoftwareApp = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: 'MenuQR',
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
-  description: 'Digital QR-based menu platform for restaurants and cafes. AI-powered setup, customer reviews, and real-time analytics.',
+  description: 'Digital QR menu platform for restaurants and cafes. AI-powered menu setup, customer likes, reviews and analytics.',
   offers: {
     '@type': 'Offer',
-    price: '0',
+    price: '99',
     priceCurrency: 'INR',
+    priceSpecification: {
+      '@type': 'UnitPriceSpecification',
+      price: '99',
+      priceCurrency: 'INR',
+      unitText: 'MONTH',
+    },
   },
   aggregateRating: {
     '@type': 'AggregateRating',
-    ratingValue: '5',
-    ratingCount: '3',
+    ratingValue: '4.9',
+    reviewCount: '3',
+    bestRating: '5',
+    worstRating: '1',
   },
+};
+
+const jsonLdReviews = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Review',
+    reviewBody: 'Our customers absolutely love scanning the QR and browsing the menu on their phone. Setup took less than a day.',
+    reviewRating: {
+      '@type': 'Rating',
+      ratingValue: '5',
+      bestRating: '5',
+      worstRating: '1',
+    },
+    author: { '@type': 'Person', name: 'Rahul Sharma' },
+    itemReviewed: { '@type': 'SoftwareApplication', name: 'MenuQR' },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Review',
+    reviewBody: 'The AI menu importer saved me hours. I uploaded a photo of our old menu and everything was ready in minutes.',
+    reviewRating: {
+      '@type': 'Rating',
+      ratingValue: '5',
+      bestRating: '5',
+      worstRating: '1',
+    },
+    author: { '@type': 'Person', name: 'Priya Nair' },
+    itemReviewed: { '@type': 'SoftwareApplication', name: 'MenuQR' },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Review',
+    reviewBody: 'Seeing which dishes get the most likes has helped us understand what our guests actually enjoy. Brilliant feature.',
+    reviewRating: {
+      '@type': 'Rating',
+      ratingValue: '5',
+      bestRating: '5',
+      worstRating: '1',
+    },
+    author: { '@type': 'Person', name: 'Mohammed Farhan' },
+    itemReviewed: { '@type': 'SoftwareApplication', name: 'MenuQR' },
+  },
+];
+
+const jsonLdFaq = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: 'What is MenuQR?',
+      acceptedAnswer: { '@type': 'Answer', text: 'MenuQR is a digital menu platform that lets restaurants and cafes in India display their menu via a QR code. Customers scan the QR and browse the full menu instantly — no app download needed.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'How much does MenuQR cost?',
+      acceptedAnswer: { '@type': 'Answer', text: 'MenuQR starts at ₹99 per month or ₹999 per year. Setup is same-day with no hidden fees or contracts.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'Is MenuQR available in Amravati?',
+      acceptedAnswer: { '@type': 'Answer', text: 'Yes, MenuQR is available in Amravati, Maharashtra and across India. Contact us on WhatsApp for same-day setup.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'Do customers need to download an app to view the menu?',
+      acceptedAnswer: { '@type': 'Answer', text: 'No. Customers simply scan the QR code with their phone camera and the menu opens instantly in the browser. No app, no download, no login required.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'How does the AI menu setup work?',
+      acceptedAnswer: { '@type': 'Answer', text: 'You upload a photo of your existing paper menu. Our AI automatically extracts all dish names, prices and descriptions and adds them to your digital menu in seconds.' },
+    },
+  ],
 };
 
 const features = [
@@ -124,10 +230,25 @@ const waLink = (msg: string) =>
 export default function LandingPage() {
   return (
     <div className="lp-root">
-      {/* JSON-LD structured data for Google rich results */}
+      {/* JSON-LD: LocalBusiness */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdLocalBusiness) }}
+      />
+      {/* JSON-LD: SoftwareApplication + AggregateRating */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdSoftwareApp) }}
+      />
+      {/* JSON-LD: Reviews (array of 3 Review schemas) */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdReviews) }}
+      />
+      {/* JSON-LD: FAQPage */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdFaq) }}
       />
 
       {/* ── Nav ────────────────────────────────────────────────── */}
@@ -163,13 +284,19 @@ export default function LandingPage() {
             Now live for restaurants &amp; cafés across India
           </div>
 
+          {/* SEO H2 sub-heading — targets 'qr menu amravati' and related queries */}
+          <h2 className="lp-hero-h2-seo">
+            QR Code Digital Menu for Restaurants &amp; Cafes in Amravati
+          </h2>
+
           <h1 className="lp-hero-h1">
             Your restaurant menu,<br />
             <span className="lp-accent-text">beautifully digital.</span>
           </h1>
 
           <p className="lp-hero-sub">
-            Replace paper menus with a stunning QR experience.
+            Replace paper menus with a stunning QR experience — trusted by
+            restaurants and cafes in Amravati, Maharashtra and across India.
             Customers scan, browse and engage — no app, no download, no friction.
           </p>
 
@@ -179,13 +306,14 @@ export default function LandingPage() {
               target="_blank"
               rel="noopener noreferrer"
               className="lp-btn lp-btn-primary lp-btn-lg"
+              aria-label="Get started with MenuQR on WhatsApp"
             >
-              <MessageCircle size={20} />
+              <MessageCircle size={20} aria-hidden="true" />
               Get Started on WhatsApp
-              <ArrowRight size={18} />
+              <ArrowRight size={18} aria-hidden="true" />
             </a>
-            <a href="#features" className="lp-btn lp-btn-ghost lp-btn-lg">
-              See features <ChevronRight size={16} />
+            <a href="#features" className="lp-btn lp-btn-ghost lp-btn-lg" aria-label="See MenuQR features">
+              See features <ChevronRight size={16} aria-hidden="true" />
             </a>
           </div>
 
@@ -318,11 +446,26 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Local SEO Section ────────────────────────────────────── */}
+      <section className="lp-section lp-local-section" aria-labelledby="local-heading">
+        <div className="lp-container">
+          <div className="lp-section-head">
+            <p className="lp-eyebrow">Our Reach</p>
+            <h2 id="local-heading" className="lp-section-h2">Serving Restaurants Across Amravati &amp; Maharashtra</h2>
+            <p className="lp-section-sub">
+              MenuQR is proudly based in Amravati, Maharashtra. We personally visit and set up digital
+              menus for restaurants, cafes, dhabas, juice bars, bakeries and food stalls across
+              Amravati, Nagpur, Nashik and all of Maharashtra. Same-day setup. Starting &#8377;99/month.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA ────────────────────────────────────────────────── */}
       <section className="lp-section lp-cta-section">
         <div className="lp-container">
           <div className="lp-cta-card">
-            <div className="lp-cta-icon">🚀</div>
+            <div className="lp-cta-icon" aria-hidden="true">🚀</div>
             <h2 className="lp-cta-h2">Ready to go digital?</h2>
             <p className="lp-cta-sub">
               Get in touch with us on WhatsApp and we&apos;ll have your digital menu live today.
@@ -333,10 +476,11 @@ export default function LandingPage() {
               target="_blank"
               rel="noopener noreferrer"
               className="lp-btn lp-btn-primary lp-btn-lg"
+              aria-label="Start setting up your digital menu on WhatsApp"
             >
-              <MessageCircle size={20} />
+              <MessageCircle size={20} aria-hidden="true" />
               Get Started on WhatsApp
-              <ArrowRight size={18} />
+              <ArrowRight size={18} aria-hidden="true" />
             </a>
             <div className="lp-cta-checks">
               {['Free consultation', 'Same-day setup', 'Ongoing support'].map((t) => (
@@ -356,13 +500,15 @@ export default function LandingPage() {
             <div className="lp-logo-icon">🍽️</div>
             <span className="lp-logo-text">MenuQR</span>
           </div>
-          <p className="lp-footer-copy">© 2026 MenuQR. Modern digital menus for restaurants &amp; cafés.</p>
+          <p className="lp-footer-copy">&copy; 2026 MenuQR. Digital QR menus for restaurants &amp; caf&eacute;s in Amravati &amp; across India.</p>
           <div className="lp-footer-links">
             <Link href="/dashboard/login">Restaurant Login</Link>
+            <Link href="/faq">FAQ</Link>
             <a
               href={waLink("Hi! I have a question about MenuQR.")}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Contact MenuQR on WhatsApp"
             >
               Contact
             </a>

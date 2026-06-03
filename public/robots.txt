@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /api
+Disallow: /m/
+
+Sitemap: https://www.themenuqr.food/sitemap.xml

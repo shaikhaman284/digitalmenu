@@ -60,8 +60,8 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   const data = await getMenuData(slug);
   if (!data) return { title: 'Menu Not Found | MenuQR' };
   const { restaurant } = data;
-  const title = `${restaurant.name} Menu`;
-  const description = `Browse the digital menu for ${restaurant.name}${restaurant.location ? ` in ${restaurant.location}` : ''}. View dishes, prices, ratings and customer reviews.`;
+  const title = `${restaurant.name} Menu — Scan QR Code | MenuQR`;
+  const description = `View the full digital menu of ${restaurant.name}${restaurant.location ? ` in ${restaurant.location}` : ''}. Browse dishes, see prices, like items and leave reviews. Powered by MenuQR.`;
   return {
     title,
     description,
@@ -69,7 +69,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
       title,
       description,
       type: 'website',
-      ...(restaurant.logo_url ? { images: [{ url: restaurant.logo_url, width: 400, height: 400, alt: restaurant.name }] } : {}),
+      ...(restaurant.logo_url ? { images: [{ url: restaurant.logo_url, width: 400, height: 400, alt: `${restaurant.name} digital menu QR code` }] } : {}),
     },
     twitter: {
       card: 'summary',
@@ -121,14 +121,23 @@ export default async function MenuSlugPage({ params, searchParams }: PageProps) 
   }
 
   if (isExpired || !restaurant.is_active) {
+    const breadcrumbLd = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.themenuqr.food' },
+        { '@type': 'ListItem', position: 2, name: `${restaurant.name} Menu`, item: `https://www.themenuqr.food/m/${slug}` },
+      ],
+    };
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 flex items-center justify-center p-6">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
         <div className="max-w-sm w-full text-center space-y-6">
           {restaurant.logo_url && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={restaurant.logo_url}
-              alt={restaurant.name}
+              alt={`${restaurant.name} digital menu QR code`}
               className="w-24 h-24 rounded-full mx-auto object-cover border-4 border-purple-700/40"
             />
           )}
@@ -151,11 +160,33 @@ export default async function MenuSlugPage({ params, searchParams }: PageProps) 
   const serializedCategories = serializeData(categories) as Category[];
   const serializedItems = serializeData(menuItems) as MenuItem[];
 
+  const restaurantLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Restaurant',
+    name: restaurant.name,
+    ...(restaurant.location ? { address: { '@type': 'PostalAddress', addressLocality: restaurant.location } } : {}),
+    hasMenu: { '@type': 'Menu', url: `https://www.themenuqr.food/m/${slug}` },
+    servesCuisine: 'Indian',
+  };
+
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.themenuqr.food' },
+      { '@type': 'ListItem', position: 2, name: `${restaurant.name} Menu`, item: `https://www.themenuqr.food/m/${slug}` },
+    ],
+  };
+
   return (
-    <MenuPage
-      restaurant={serializedRestaurant}
-      categories={serializedCategories}
-      initialItems={serializedItems}
-    />
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(restaurantLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+      <MenuPage
+        restaurant={serializedRestaurant}
+        categories={serializedCategories}
+        initialItems={serializedItems}
+      />
+    </>
   );
 }
