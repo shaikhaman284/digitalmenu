@@ -44,6 +44,12 @@ service cloud.firestore {
         allow read, write: if isAdmin() || isRestaurantOwner(restaurantId);
       }
 
+      // AI Import usage counts (used by the dashboard API)
+      match /ai_import_counts/{monthKey} {
+        allow read: if isAdmin() || isRestaurantOwner(restaurantId);
+        allow write: if isAdmin() || isRestaurantOwner(restaurantId);
+      }
+
       // Menu Items: public read, owner write
       match /menu_items/{itemId} {
         allow read: if true; // public

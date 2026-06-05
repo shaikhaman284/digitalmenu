@@ -22,6 +22,8 @@ interface RestaurantRow {
   qr_slug: string;
   is_active: boolean;
   plan_expires_at: string | null;
+  ai_import_limit: number;
+  ai_imports_this_month: number;
 }
 
 interface Stats {
@@ -131,7 +133,7 @@ export default function AdminDashboardPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-purple-900/20">
-                  {['Name', 'Phone', 'Plan', 'Expires', 'QR Slug', 'Status', ''].map((h) => (
+                  {['Name', 'Phone', 'Plan', 'Expires', 'AI Imports', 'QR Slug', 'Status', ''].map((h) => (
                     <th key={h} className="text-left px-5 py-3 text-xs font-medium text-purple-400 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -160,6 +162,19 @@ export default function AdminDashboardPage() {
                       <td className="px-5 py-4 text-sm text-purple-300">{r.phone}</td>
                       <td className="px-5 py-4 text-sm text-purple-300 capitalize">{r.plan}</td>
                       <td className="px-5 py-4 text-sm text-purple-300">{formatDate(r.plan_expires_at)}</td>
+                      <td className="px-5 py-4">
+                        {(() => {
+                          const pct = r.ai_imports_this_month / r.ai_import_limit;
+                          const color = pct >= 1 ? 'text-red-400 bg-red-900/20 border-red-500/30'
+                            : pct >= 0.8 ? 'text-amber-400 bg-amber-900/20 border-amber-500/30'
+                            : 'text-emerald-400 bg-emerald-900/20 border-emerald-500/30';
+                          return (
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg border ${color}`}>
+                              {r.ai_imports_this_month} / {r.ai_import_limit}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-5 py-4">
                         <code className="text-xs bg-purple-900/30 text-purple-300 px-2 py-1 rounded-lg">{r.qr_slug || '—'}</code>
                       </td>

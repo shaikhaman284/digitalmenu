@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
@@ -17,7 +17,6 @@ interface Props {
 }
 
 type Step = 1 | 2 | 3 | 4;
-const MAX_IMPORTS_PER_MONTH = 5;
 
 const stepLabels = ['Upload Photos', 'Extracting…', 'Review & Edit', 'Done!'];
 
@@ -47,6 +46,8 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<MenuItemDraft[]>([]);
   const [importCount, setImportCount] = useState(0);
+  const [importLimit, setImportLimit] = useState(5);
+  const [countLoading, setCountLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Which item row is being expanded for pricing edit
@@ -54,13 +55,30 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
 
   function handleClose() { setStep(1); setPhotos([]); setItems([]); setExpandedRow(null); onClose(); }
 
+  // Fetch the real import count as soon as the modal opens
+  useEffect(() => {
+    if (!isOpen || !restaurantId) return;
+    setCountLoading(true);
+    fetch(`/api/dashboard/ai-import-count?restaurantId=${restaurantId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setImportCount(d.count ?? 0);
+        setImportLimit(d.limit ?? 5);
+      })
+      .catch(() => { /* leave defaults */ })
+      .finally(() => setCountLoading(false));
+  }, [isOpen, restaurantId]);
+
   async function handleExtract() {
     if (photos.length === 0) { toastError('Please upload at least one photo'); return; }
+    // Re-check the latest count from the server before proceeding
     const countRes = await fetch(`/api/dashboard/ai-import-count?restaurantId=${restaurantId}`);
     const countData = await countRes.json();
     const count = countData.count ?? 0;
+    const limit = countData.limit ?? importLimit;
     setImportCount(count);
-    if (count >= MAX_IMPORTS_PER_MONTH) { toastError(`Monthly limit reached (${MAX_IMPORTS_PER_MONTH} imports/month)`); return; }
+    setImportLimit(limit);
+    if (count >= limit) { toastError(`Monthly limit reached (${limit} imports/month)`); return; }
 
     setExtracting(true);
     try {
@@ -69,7 +87,7 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
         const base64 = await resizeImage(photo, 1024);
         const res = await fetch('/api/extract-menu', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64 }),
+          body: JSON.stringify({ image: base64, restaurantId }),
         });
         if (!res.ok) throw new Error((await res.json()).error || 'Extraction failed');
         const data = await res.json();
@@ -89,6 +107,7 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
         body: JSON.stringify({ restaurantId }),
       });
       setImportCount(count + 1);
+      setImportLimit(limit);
       setItems(deduped);
       setStep(3);
       success(`Extracted ${deduped.length} items!`);
@@ -180,7 +199,7 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
   }
 
 
-  const remainingImports = MAX_IMPORTS_PER_MONTH - importCount;
+  const remainingImports = importLimit - importCount;
 
   const cellStyle: React.CSSProperties = { padding: '6px 8px', verticalAlign: 'top' };
   const inlineInputStyle: React.CSSProperties = {
@@ -229,7 +248,11 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
           <div style={{ fontSize: '0.875rem', color: 'var(--db-text-2)' }}>
             Upload photos of your existing menu (up to 5). Our AI will extract all items and their pricing tiers (Full/Half/Qtr) automatically.
             <span style={{ display: 'block', marginTop: 4, fontSize: '0.8rem', color: 'var(--db-text-muted)' }}>
-              Imports remaining this month: <strong style={{ color: remainingImports <= 0 ? 'var(--db-red)' : 'var(--db-green)' }}>{remainingImports <= 0 ? '0 (limit reached)' : remainingImports}</strong>
+              Imports remaining this month:{' '}
+              {countLoading
+                ? <span style={{ display: 'inline-block', width: 48, height: 14, borderRadius: 4, background: 'var(--db-border)', verticalAlign: 'middle', animation: 'pulse 1.2s ease-in-out infinite' }} />
+                : <strong style={{ color: remainingImports <= 0 ? 'var(--db-red)' : 'var(--db-green)' }}>{remainingImports <= 0 ? `0 / ${importLimit} (limit reached)` : `${remainingImports} / ${importLimit}`}</strong>
+              }
             </span>
           </div>
 
@@ -266,7 +289,7 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <Button variant="ghost" fullWidth onClick={handleClose}>Cancel</Button>
             <Button fullWidth leftIcon={<Wand2 size={15} />}
-              disabled={photos.length === 0 || remainingImports <= 0}
+              disabled={photos.length === 0 || remainingImports <= 0 || countLoading}
               onClick={handleExtract} loading={extracting}>
               Extract Menu
             </Button>
