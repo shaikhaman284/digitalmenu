@@ -29,6 +29,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const r = restSnap.data()!;
     const expiresAt = r.plan_expires_at?.toDate?.() ?? null;
 
+    // Fetch current month's AI import count
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const countSnap = await adminDb
+      .collection('restaurants').doc(id)
+      .collection('ai_import_counts').doc(monthKey)
+      .get();
+    const aiImportsThisMonth = countSnap.exists ? (countSnap.data() as { count: number }).count : 0;
+
     return NextResponse.json({
       restaurant: {
         id: restSnap.id,
@@ -40,6 +49,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         plan_expires_at: expiresAt?.toISOString() ?? null,
         qr_slug: r.qr_slug || '',
         uid: r.uid,
+        ai_import_limit: (r.ai_import_limit as number) ?? 5,
+        ai_imports_this_month: aiImportsThisMonth,
       },
       menuItems: itemsSnap.docs.map((d) => {
         const data = d.data();
@@ -59,18 +70,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// POST /api/admin/restaurant/[id] — update plan/status
+// POST /api/admin/restaurant/[id] — update plan/status/ai_import_limit
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await verifyAdmin();
     const { id } = await params;
-    const body = await request.json() as { plan?: string; plan_expires_at?: string; is_active?: boolean };
+    const body = await request.json() as { plan?: string; plan_expires_at?: string; is_active?: boolean; ai_import_limit?: number };
 
     const adminDb = getAdminDb();
     const update: Record<string, unknown> = {};
     if (body.plan) update.plan = body.plan;
     if (body.plan_expires_at) update.plan_expires_at = new Date(body.plan_expires_at);
     if (typeof body.is_active === 'boolean') update.is_active = body.is_active;
+    if (typeof body.ai_import_limit === 'number' && body.ai_import_limit >= 0) {
+      update.ai_import_limit = body.ai_import_limit;
+    }
 
     await adminDb.collection('restaurants').doc(id).update(update);
     return NextResponse.json({ success: true });

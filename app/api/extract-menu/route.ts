@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGroqClient } from '@/lib/groq';
+import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
+import { cookies } from 'next/headers';
 import type { PricingTiers } from '@/types';
 
 export const runtime = 'nodejs';
@@ -201,9 +203,23 @@ Each object must have:
 }
 
 export async function POST(request: NextRequest) {
+  // ── Auth guard ────────────────────────────────────────────────────────
+  let uid: string;
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('mq_session')?.value;
+    if (!sessionCookie) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const decoded = await getAdminAuth().verifySessionCookie(sessionCookie, true);
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
-    const { image } = body as { image: string };
+    const { image, restaurantId } = body as { image: string; restaurantId?: string };
 
     if (!image || !image.startsWith('data:')) {
       return NextResponse.json(
@@ -211,6 +227,36 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // ── Per-restaurant quota check ────────────────────────────────────────
+    if (restaurantId) {
+      const adminDb = getAdminDb();
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      const [countSnap, restSnap] = await Promise.all([
+        adminDb.collection('restaurants').doc(restaurantId)
+          .collection('ai_import_counts').doc(monthKey).get(),
+        adminDb.collection('restaurants').doc(restaurantId).get(),
+      ]);
+
+      // Also verify the requesting user owns this restaurant
+      const restData = restSnap.data() as Record<string, unknown> | undefined;
+      if (restData && restData.uid !== uid) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
+      const currentCount = countSnap.exists ? (countSnap.data() as { count: number }).count : 0;
+      const limit: number = restData ? ((restData.ai_import_limit as number) ?? 5) : 5;
+
+      if (currentCount >= limit) {
+        return NextResponse.json(
+          { error: `Monthly limit reached (${limit} imports/month)` },
+          { status: 429 }
+        );
+      }
+    }
+
 
     let items: MenuItemExtracted[];
 

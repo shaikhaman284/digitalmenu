@@ -25,15 +25,26 @@ export async function GET(request: NextRequest) {
   try {
     const adminDb = getAdminDb();
 
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
     const [restSnap, qrSnap] = await Promise.all([
       adminDb.collection('restaurants').get(),
       adminDb.collection('qr_codes').where('status', '==', 'unbound').get(),
     ]);
 
-    const now = new Date();
-    const restaurants = restSnap.docs.map((d) => {
+    // Fetch AI import counts for all restaurants for the current month in parallel
+    const aiCountSnaps = await Promise.all(
+      restSnap.docs.map((d) =>
+        adminDb.collection('restaurants').doc(d.id)
+          .collection('ai_import_counts').doc(monthKey).get()
+      )
+    );
+
+    const restaurants = restSnap.docs.map((d, idx) => {
       const data = d.data();
       const expiresAt = data.plan_expires_at?.toDate?.() ?? null;
+      const aiCountData = aiCountSnaps[idx].exists ? (aiCountSnaps[idx].data() as { count: number }) : null;
       return {
         id: d.id,
         name: data.name,
@@ -42,6 +53,8 @@ export async function GET(request: NextRequest) {
         qr_slug: data.qr_slug || '',
         is_active: data.is_active,
         plan_expires_at: expiresAt ? expiresAt.toISOString() : null,
+        ai_import_limit: (data.ai_import_limit as number) ?? 5,
+        ai_imports_this_month: aiCountData?.count ?? 0,
       };
     });
 
