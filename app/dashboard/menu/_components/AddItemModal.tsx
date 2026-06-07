@@ -130,8 +130,47 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
 
   async function uploadImage(itemId: string): Promise<string | null> {
     if (!imageFile) return editItem?.image_url || null;
+
+    // Compress the image client-side (max 1200 px, JPEG 85%) before sending
+    // through /api/upload-image. This keeps the payload well under Vercel's
+    // 4.5 MB body limit — the same approach used by the working logo upload,
+    // just with a resize step added for potentially large camera photos.
+    let uploadFile: File = imageFile;
+    try {
+      const compressed = await new Promise<Blob>((resolve, reject) => {
+        const img = new window.Image();
+        const objectUrl = URL.createObjectURL(imageFile);
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          const MAX = 1200;
+          let { width, height } = img;
+          if (width > height) {
+            if (width > MAX) { height = Math.round((height * MAX) / width); width = MAX; }
+          } else {
+            if (height > MAX) { width = Math.round((width * MAX) / height); height = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+            'image/jpeg',
+            0.85,
+          );
+        };
+        img.onerror = reject;
+        img.src = objectUrl;
+      });
+      uploadFile = new File([compressed], 'image.jpg', { type: 'image/jpeg' });
+    } catch {
+      // If compression fails for any reason, fall back to the original file
+      uploadFile = imageFile;
+    }
+
+    // Send to the same /api/upload-image endpoint that the logo upload uses
     const fd = new FormData();
-    fd.append('file', imageFile);
+    fd.append('file', uploadFile);
     fd.append('path', `restaurants/${restaurantId}/menu/${itemId}`);
     const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
     if (!res.ok) throw new Error('Image upload failed');
