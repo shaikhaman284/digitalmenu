@@ -72,6 +72,8 @@ export async function GET(request: NextRequest) {
             if (rSnap.exists) {
               restaurantNames[id] = (rSnap.data()?.name as string) || id;
             }
+            // If rSnap doesn't exist, restaurantNames[id] stays undefined
+            // — the QR is orphaned (restaurant was deleted)
           })
         );
       }
@@ -79,11 +81,15 @@ export async function GET(request: NextRequest) {
       const qrCodes = snap.docs
         .map((d) => {
           const data = d.data();
+          const rid = data.restaurant_id as string | null;
+          // Detect orphaned QRs: status is 'bound' but restaurant no longer exists
+          const isOrphaned = data.status === 'bound' && !!rid && !restaurantNames[rid];
           return {
             slug: d.id,
             status: data.status as string,
-            restaurant_id: data.restaurant_id as string | null,
-            restaurant_name: data.restaurant_id ? (restaurantNames[data.restaurant_id] ?? null) : null,
+            restaurant_id: rid,
+            restaurant_name: rid ? (restaurantNames[rid] ?? null) : null,
+            is_orphaned: isOrphaned,
             bound_at: data.bound_at?.toDate?.()?.toISOString() ?? null,
             created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
           };
@@ -127,6 +133,45 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({ batches });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/admin/qr-batches?slug=MQ-0001
+ *   → Unbind a single QR code (reset to unbound without deleting it).
+ *     Useful for fixing orphaned QR codes whose restaurant was deleted.
+ */
+export async function PATCH(request: NextRequest) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('mq_session')?.value;
+  if (!sessionCookie) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  try {
+    await verifyAdmin(sessionCookie);
+  } catch {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const slug = searchParams.get('slug');
+  if (!slug) return NextResponse.json({ error: 'Provide ?slug=MQ-xxxx' }, { status: 400 });
+
+  try {
+    const adminDb = getAdminDb();
+    const qrRef = adminDb.collection('qr_codes').doc(slug);
+    const qrSnap = await qrRef.get();
+    if (!qrSnap.exists) return NextResponse.json({ error: 'QR code not found' }, { status: 404 });
+
+    await qrRef.update({
+      status: 'unbound',
+      restaurant_id: null,
+      bound_at: null,
+    });
+
+    return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed';
     return NextResponse.json({ error: message }, { status: 500 });

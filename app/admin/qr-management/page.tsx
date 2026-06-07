@@ -9,7 +9,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import {
   QrCode, ArrowLeft, Download, Layers, CheckCircle,
-  XCircle, RefreshCw, ChevronRight, Trash2, AlertTriangle,
+  XCircle, RefreshCw, ChevronRight, Trash2, AlertTriangle, Link2Off,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +27,7 @@ interface QRItem {
   status: string;
   restaurant_id: string | null;
   restaurant_name: string | null;
+  is_orphaned: boolean;
   bound_at: string | null;
   created_at: string | null;
 }
@@ -236,6 +237,7 @@ function BatchDetailView({
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<QRItem | null>(null);
   const [deletingSlug, setDeletingSlug] = useState('');
+  const [unbindingSlug, setUnbindingSlug] = useState('');
   const qrRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
   const baseUrl = typeof window !== 'undefined'
@@ -287,6 +289,30 @@ function BatchDetailView({
       toastError(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setDeletingSlug('');
+    }
+  }
+
+  async function handleUnbind(item: QRItem) {
+    setUnbindingSlug(item.slug);
+    try {
+      const res = await fetch(`/api/admin/qr-batches?slug=${encodeURIComponent(item.slug)}`, {
+        method: 'PATCH',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      success(`${item.slug} unbound successfully`);
+      setQrItems((prev) =>
+        prev.map((q) =>
+          q.slug === item.slug
+            ? { ...q, status: 'unbound', restaurant_id: null, restaurant_name: null, is_orphaned: false, bound_at: null }
+            : q
+        )
+      );
+      onRefreshNeeded();
+    } catch (err: unknown) {
+      toastError(err instanceof Error ? err.message : 'Unbind failed');
+    } finally {
+      setUnbindingSlug('');
     }
   }
 
@@ -400,10 +426,13 @@ function BatchDetailView({
                 // Use server-signed URL (contains HMAC token) if available, else fall back
                 const qrUrl = qrUrls[item.slug] || `${baseUrl}/m/${item.slug}`;
                 const isBound = item.status === 'bound';
+                const isOrphaned = item.is_orphaned;
                 return (
                   <div
                     key={item.slug}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                    className={`flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors ${
+                      isOrphaned ? 'bg-amber-900/5 border-l-2 border-amber-500/40' : ''
+                    }`}
                   >
                     {/* Hidden HD canvas */}
                     <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden' }}>
@@ -425,23 +454,49 @@ function BatchDetailView({
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-mono text-sm font-semibold text-white">{item.slug}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-mono text-sm font-semibold text-white">{item.slug}</p>
+                        {isOrphaned && (
+                          <span className="flex items-center gap-1 text-xs font-medium text-amber-400 bg-amber-900/30 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+                            <AlertTriangle size={10} />
+                            Orphaned
+                          </span>
+                        )}
+                      </div>
                       {isBound && item.restaurant_name && (
                         <p className="text-xs text-emerald-400 mt-0.5 truncate">→ {item.restaurant_name}</p>
                       )}
-                      {isBound && item.bound_at && (
+                      {isOrphaned && (
+                        <p className="text-xs text-amber-400/70 mt-0.5">Restaurant was deleted — click Unbind to free this QR</p>
+                      )}
+                      {isBound && !isOrphaned && item.bound_at && (
                         <p className="text-xs text-purple-600">Bound {formatDate(item.bound_at)}</p>
                       )}
                     </div>
 
                     {/* Status badge */}
                     <span className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
-                      isBound
+                      isOrphaned
+                        ? 'bg-amber-900/30 text-amber-400 border border-amber-500/20'
+                        : isBound
                         ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-500/20'
                         : 'bg-amber-900/30 text-amber-400 border border-amber-500/20'
                     }`}>
-                      {isBound ? 'Bound' : 'Unbound'}
+                      {isOrphaned ? 'Orphaned' : isBound ? 'Bound' : 'Unbound'}
                     </span>
+
+                    {/* Unbind button — only for orphaned QRs */}
+                    {isOrphaned && (
+                      <button
+                        onClick={() => handleUnbind(item)}
+                        disabled={unbindingSlug === item.slug || !!deletingSlug}
+                        className="shrink-0 flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold text-amber-400 border border-amber-500/30 bg-amber-900/20 hover:bg-amber-900/40 transition-all disabled:opacity-40"
+                        title={`Unbind ${item.slug}`}
+                      >
+                        <Link2Off size={12} />
+                        {unbindingSlug === item.slug ? 'Unbinding…' : 'Unbind'}
+                      </button>
+                    )}
 
                     {/* Download */}
                     <Button
@@ -456,7 +511,7 @@ function BatchDetailView({
                     {/* Delete */}
                     <button
                       onClick={() => setConfirmDelete(item)}
-                      disabled={!!deletingSlug}
+                      disabled={!!deletingSlug || !!unbindingSlug}
                       className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-purple-600 hover:text-red-400 hover:bg-red-900/20 transition-all disabled:opacity-40"
                       title={`Delete ${item.slug}`}
                     >
