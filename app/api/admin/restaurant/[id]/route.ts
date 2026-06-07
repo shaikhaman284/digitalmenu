@@ -92,3 +92,45 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error' }, { status: 500 });
   }
 }
+
+// DELETE /api/admin/restaurant/[id] — permanently delete restaurant and all data
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await verifyAdmin();
+    const { id } = await params;
+    const adminDb = getAdminDb();
+
+    // Verify the restaurant exists first and get its data
+    const restaurantRef = adminDb.collection('restaurants').doc(id);
+    const snap = await restaurantRef.get();
+    if (!snap.exists) return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+
+    const data = snap.data()!;
+    const qrSlug = data.qr_slug as string | undefined;
+
+    // If a QR code was bound to this restaurant, release it back to 'unbound'
+    // so it can be reused and the QR management panel shows it correctly.
+    if (qrSlug) {
+      const qrRef = adminDb.collection('qr_codes').doc(qrSlug);
+      const qrSnap = await qrRef.get();
+      // Only update if the QR still points to this restaurant (sanity check)
+      if (qrSnap.exists && qrSnap.data()?.restaurant_id === id) {
+        await qrRef.update({
+          status: 'unbound',
+          restaurant_id: null,
+          bound_at: null,
+        });
+      }
+    }
+
+    // Use Firebase Admin's recursiveDelete to remove the restaurant doc
+    // and ALL subcollections (menu_items, categories, ai_import_counts, etc.)
+    await adminDb.recursiveDelete(restaurantRef);
+
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Error';
+    return NextResponse.json({ error: msg }, { status: msg === 'Unauthorized' ? 401 : msg === 'Forbidden' ? 403 : 500 });
+  }
+}
+

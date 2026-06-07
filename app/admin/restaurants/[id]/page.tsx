@@ -7,7 +7,8 @@ import { Input, Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
 import { formatDate, daysRemaining } from '@/lib/utils';
-import { ArrowLeft, Save, ToggleLeft, ToggleRight, Camera } from 'lucide-react';
+import { ArrowLeft, Save, ToggleLeft, ToggleRight, Camera, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface MenuItem {
@@ -39,6 +40,8 @@ function RestaurantDetailContent({ id }: { id: string }) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const router = useRouter();
   const [form, setForm] = useState({
     plan: 'monthly',
     planExpiry: '',
@@ -91,6 +94,21 @@ function RestaurantDetailContent({ id }: { id: string }) {
       toastError('Failed to save changes');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!restaurant) return;
+    if (!confirm(`Are you sure you want to permanently delete "${restaurant.name}"? This will delete ALL menu items, categories, and data. This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/restaurant/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete');
+      success(`"${restaurant.name}" has been deleted.`);
+      router.push('/admin/dashboard');
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Failed to delete restaurant');
+      setDeleting(false);
     }
   }
 
@@ -255,6 +273,25 @@ function RestaurantDetailContent({ id }: { id: string }) {
             <div className="ml-auto">
               <Button onClick={handleSave} loading={saving} leftIcon={<Save size={16} />}>
                 Save Changes
+              </Button>
+            </div>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="mt-2 p-4 rounded-xl border border-red-500/30 bg-red-900/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-red-400">Delete Restaurant</p>
+                <p className="text-xs text-red-400/70 mt-0.5">Permanently removes this restaurant and all its data. Cannot be undone.</p>
+              </div>
+              <Button
+                variant="danger"
+                size="sm"
+                leftIcon={<Trash2 size={14} />}
+                loading={deleting}
+                onClick={handleDelete}
+              >
+                Delete
               </Button>
             </div>
           </div>
