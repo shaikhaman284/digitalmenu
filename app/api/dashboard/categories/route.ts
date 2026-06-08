@@ -67,11 +67,55 @@ export async function POST(request: NextRequest) {
     const col = adminDb.collection('restaurants').doc(restaurantId).collection('categories');
 
     if (action === 'add' && name) {
+      // Uniqueness check: reject if a category with the same name already exists (case-insensitive)
+      const existingSnap = await col.get();
+      const newNameNorm = name.trim().toLowerCase();
+      const duplicate = existingSnap.docs.some(
+        (d) => ((d.data() as { name: string }).name ?? '').toLowerCase().trim() === newNameNorm,
+      );
+      if (duplicate) {
+        return NextResponse.json({ error: `A category named "${name.trim()}" already exists.` }, { status: 409 });
+      }
       const ref = await col.add({ name: name.trim(), display_order: Date.now() });
       return NextResponse.json({ id: ref.id });
     }
     if (action === 'rename' && categoryId && name) {
-      await col.doc(categoryId).update({ name: name.trim() });
+      const newName = name.trim();
+      const newNameNorm = newName.toLowerCase();
+
+      // Uniqueness check: reject if another category already has this name (case-insensitive)
+      const existingSnap = await col.get();
+      const duplicate = existingSnap.docs.some(
+        (d) => d.id !== categoryId && ((d.data() as { name: string }).name ?? '').toLowerCase().trim() === newNameNorm,
+      );
+      if (duplicate) {
+        return NextResponse.json({ error: `A category named "${newName}" already exists.` }, { status: 409 });
+      }
+
+      // Fetch old name before updating, so we can propagate to menu items
+      const catDoc = await col.doc(categoryId).get();
+      const oldName: string = (catDoc.data() as { name: string } | undefined)?.name ?? '';
+
+      // Update the category document
+      await col.doc(categoryId).update({ name: newName });
+
+      // Update every menu item that references the old category name
+      if (oldName && oldName.toLowerCase().trim() !== newNameNorm) {
+        const menuCol = adminDb
+          .collection('restaurants')
+          .doc(restaurantId)
+          .collection('menu_items');
+        const itemsSnap = await menuCol
+          .where('category', '==', oldName)
+          .get();
+
+        if (!itemsSnap.empty) {
+          const batch = adminDb.batch();
+          itemsSnap.docs.forEach((d) => batch.update(d.ref, { category: newName }));
+          await batch.commit();
+        }
+      }
+
       return NextResponse.json({ success: true });
     }
     if (action === 'delete' && categoryId) {
