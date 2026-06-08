@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { StarRating } from '@/components/ui/StarRating';
 import { formatPrice, getCategoryIcon } from '@/lib/utils';
-import { Plus, Camera, Heart, ToggleLeft, ToggleRight, Pencil, Trash2, Search, Check } from 'lucide-react';
+import { Plus, Camera, Heart, ToggleLeft, ToggleRight, Pencil, Trash2, Search, Check, FolderInput } from 'lucide-react';
 import { AddItemModal } from './_components/AddItemModal';
 import { AIImportModal } from './_components/AIImportModal';
 import Image from 'next/image';
@@ -68,6 +68,9 @@ function MenuContent() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkMoving, setBulkMoving] = useState(false);
+  const [showBulkCatPicker, setShowBulkCatPicker] = useState(false);
+  const [bulkTargetCat, setBulkTargetCat] = useState('');
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   async function loadData() {
@@ -167,6 +170,29 @@ function MenuContent() {
       loadData();
     } finally {
       setBulkDeleting(false);
+    }
+  }
+
+  async function handleBulkCategoryChange() {
+    if (!bulkTargetCat || selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    setBulkMoving(true);
+    // Optimistically update local state
+    setItems((prev) => prev.map((i) => selectedIds.has(i.id) ? { ...i, category: bulkTargetCat } : i));
+    setSelectedIds(new Set());
+    setShowBulkCatPicker(false);
+    try {
+      const res = await fetch('/api/dashboard/menu', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bulk_update_category', itemIds: ids, data: { category: bulkTargetCat } }),
+      });
+      if (!res.ok) throw new Error();
+      success(`${ids.length} item${ids.length > 1 ? 's' : ''} moved to "${bulkTargetCat}"`);
+    } catch {
+      toastError('Failed to move items');
+      loadData();
+    } finally {
+      setBulkMoving(false);
     }
   }
 
@@ -329,19 +355,56 @@ function MenuContent() {
         )}
       </div>
 
-      {/* Bulk delete bar */}
+      {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }} className="animate-fade-in">
-          <div className="db-card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', borderRadius: 16, boxShadow: '0 8px 32px rgba(28,22,17,0.14)' }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--db-text)' }}>
+          <div className="db-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderRadius: 16, boxShadow: '0 8px 32px rgba(28,22,17,0.14)', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--db-text)', whiteSpace: 'nowrap' }}>
               <span style={{ color: 'var(--db-accent)', fontWeight: 700 }}>{selectedIds.size}</span> item{selectedIds.size > 1 ? 's' : ''} selected
             </span>
             <button
-              onClick={() => setSelectedIds(new Set())}
-              style={{ fontSize: '0.8rem', color: 'var(--db-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+              onClick={() => { setSelectedIds(new Set()); setShowBulkCatPicker(false); }}
+              style={{ fontSize: '0.8rem', color: 'var(--db-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2, whiteSpace: 'nowrap' }}
             >
               Clear
             </button>
+
+            {/* Move to category */}
+            {showBulkCatPicker ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <select
+                  value={bulkTargetCat}
+                  onChange={(e) => setBulkTargetCat(e.target.value)}
+                  autoFocus
+                  style={{
+                    fontSize: '0.82rem', padding: '5px 10px', borderRadius: 8,
+                    border: '1.5px solid var(--db-accent)', background: 'var(--db-surface)',
+                    color: 'var(--db-text)', outline: 'none', cursor: 'pointer',
+                  }}
+                >
+                  <option value="" disabled>Pick category…</option>
+                  {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+                <Button size="sm" loading={bulkMoving} onClick={handleBulkCategoryChange} disabled={!bulkTargetCat}>
+                  Move
+                </Button>
+                <button
+                  onClick={() => setShowBulkCatPicker(false)}
+                  style={{ fontSize: '0.8rem', color: 'var(--db-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <Button
+                variant="outline" size="sm"
+                leftIcon={<FolderInput size={14} />}
+                onClick={() => { setBulkTargetCat(categories[0]?.name || ''); setShowBulkCatPicker(true); }}
+              >
+                Move to…
+              </Button>
+            )}
+
             <Button variant="danger" size="sm" leftIcon={<Trash2 size={14} />} loading={bulkDeleting} onClick={handleBulkDelete}>
               Delete {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''}
             </Button>

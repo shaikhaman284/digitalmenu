@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     if (!ids) return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
 
     const { action, itemId, itemIds, data } = await request.json() as {
-      action: 'add' | 'update' | 'delete' | 'bulk_delete' | 'toggle';
+      action: 'add' | 'update' | 'delete' | 'bulk_delete' | 'bulk_update_category' | 'toggle';
       itemId?: string;
       itemIds?: string[];
       data?: Record<string, unknown>;
@@ -79,6 +79,12 @@ export async function POST(request: NextRequest) {
     if (action === 'bulk_delete' && Array.isArray(itemIds) && itemIds.length > 0) {
       await Promise.all(itemIds.map((id) => col.doc(id).delete()));
       return NextResponse.json({ success: true, deleted: itemIds.length });
+    }
+    if (action === 'bulk_update_category' && Array.isArray(itemIds) && itemIds.length > 0 && data?.category) {
+      const batch = adminDb.batch();
+      itemIds.forEach((id) => batch.update(col.doc(id), { category: data.category as string }));
+      await batch.commit();
+      return NextResponse.json({ success: true, updated: itemIds.length });
     }
     if (action === 'toggle' && itemId && data) {
       await col.doc(itemId).update({ is_available: data.is_available });
