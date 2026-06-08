@@ -97,6 +97,8 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
   const [likingIds, setLikingIds] = useState<Set<string>>(new Set());
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalReviews, setModalReviews] = useState<{ id: string; rating: number; text: string; created_at: string | null }[]>([]);
+  const [modalReviewsLoading, setModalReviewsLoading] = useState(false);
 
   useEffect(() => { setVisitorToken(getVisitorToken()); }, []);
 
@@ -170,8 +172,21 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
 
   function closeItemModal() {
     setModalVisible(false);
-    setTimeout(() => { setSelectedItem(null); document.body.style.overflow = ''; }, 320);
+    setTimeout(() => { setSelectedItem(null); setModalReviews([]); document.body.style.overflow = ''; }, 320);
   }
+
+  // Fetch reviews whenever the modal opens for a new item
+  useEffect(() => {
+    if (!selectedItem) return;
+    setModalReviews([]);
+    if (selectedItem.review_count === 0) return;
+    setModalReviewsLoading(true);
+    fetch(`/api/public/review?restaurantId=${restaurant.id}&itemId=${selectedItem.id}`)
+      .then((r) => r.json())
+      .then((data) => setModalReviews(data.reviews || []))
+      .catch(() => {})
+      .finally(() => setModalReviewsLoading(false));
+  }, [selectedItem?.id, restaurant.id]);
 
   const modalItem = selectedItem ? (items.find((i) => i.id === selectedItem.id) ?? selectedItem) : null;
 
@@ -417,6 +432,37 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                       </div>
                     </div>
 
+                    {/* Reviews list inside modal */}
+                    {(modalReviewsLoading || modalReviews.length > 0) && (
+                      <>
+                        <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #e8e0d4, transparent)' }} />
+                        <div>
+                          <p style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9c8e7a', marginBottom: 10 }}>Reviews</p>
+                          {modalReviewsLoading ? (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>
+                              <div style={{ width: 22, height: 22, border: '2px solid #ece7dc', borderTopColor: '#c8622a', borderRadius: '50%', animation: 'mf-spin 0.7s linear infinite' }} />
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              {modalReviews.slice(0, 5).map((review) => (
+                                <div key={review.id} style={{ borderBottom: '1px solid #f0ebe2', paddingBottom: 12 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                    <div style={{ display: 'flex', gap: 2 }}>
+                                      {[1,2,3,4,5].map((s) => <Star key={s} size={11} style={{ fill: s <= review.rating ? '#d4a853' : 'none', color: s <= review.rating ? '#d4a853' : '#ccc' }} />)}
+                                    </div>
+                                    <span style={{ fontSize: '0.68rem', color: '#9c8e7a' }}>
+                                      {review.created_at ? new Date(review.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : ''}
+                                    </span>
+                                  </div>
+                                  {review.text && <p style={{ fontSize: '0.82rem', color: '#4a4035', lineHeight: 1.5 }}>&#x201C;{review.text}&#x201D;</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+
                     {/* Buttons */}
                     <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
                       <button onClick={() => { closeItemModal(); setTimeout(() => setReviewItem(modalItem), 340); }} style={{ flex: 1, height: 46, borderRadius: 14, background: '#fff3e4', border: '1.5px solid #f5d0a0', color: '#c8622a', fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}>
@@ -434,6 +480,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
           </div>
         </div>
       )}
+      <style>{`@keyframes mf-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

@@ -76,8 +76,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Fetch recent reviews across all items (top 5 items only, latest 6 reviews each)
-    const topItems = menuItems.slice(0, 5);
+    // Fetch recent reviews across ALL items that have at least one review.
+    // Previous approach only sampled the top-5 liked items which silently missed
+    // reviews on less-liked items. Now we collect from every reviewed item.
+    const reviewedItems = menuItems.filter((item) => item.review_count > 0);
     const allReviews: Array<{
       id: string;
       itemId: string;
@@ -88,7 +90,7 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     await Promise.all(
-      topItems.map(async (item) => {
+      reviewedItems.map(async (item) => {
         const reviewSnap = await adminDb
           .collection('restaurants')
           .doc(restaurantId)
@@ -96,7 +98,7 @@ export async function GET(request: NextRequest) {
           .doc(item.id)
           .collection('reviews')
           .orderBy('created_at', 'desc')
-          .limit(6)
+          .limit(10)
           .get();
 
         reviewSnap.docs.forEach((d) => {
