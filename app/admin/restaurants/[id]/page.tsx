@@ -29,6 +29,7 @@ interface RestaurantDetail {
   plan: string;
   qr_slug: string;
   is_active: boolean;
+  billing_enabled: boolean;
   plan_expires_at: string | null;
   ai_import_limit: number;
   ai_imports_this_month: number;
@@ -46,6 +47,7 @@ function RestaurantDetailContent({ id }: { id: string }) {
     plan: 'monthly',
     planExpiry: '',
     is_active: true,
+    billing_enabled: false,
     ai_import_limit: 5,
   });
 
@@ -62,6 +64,7 @@ function RestaurantDetailContent({ id }: { id: string }) {
           plan: r.plan,
           planExpiry: r.plan_expires_at ? new Date(r.plan_expires_at).toISOString().split('T')[0] : '',
           is_active: r.is_active,
+          billing_enabled: r.billing_enabled ?? false,
           ai_import_limit: r.ai_import_limit ?? 5,
         });
       } catch {
@@ -84,6 +87,7 @@ function RestaurantDetailContent({ id }: { id: string }) {
           plan: form.plan,
           plan_expires_at: form.planExpiry,
           is_active: form.is_active,
+          billing_enabled: form.billing_enabled,
           ai_import_limit: form.ai_import_limit,
         }),
       });
@@ -249,6 +253,29 @@ function RestaurantDetailContent({ id }: { id: string }) {
               >
                 {form.is_active
                   ? <ToggleRight size={36} className="text-emerald-400" />
+                  : <ToggleLeft size={36} className="text-purple-600" />
+                }
+              </button>
+            </div>
+          </div>
+
+          {/* Billing Access toggle */}
+          <div className="p-4 rounded-xl glass-light">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-white">🧾 Billing Access</p>
+                <p className="text-xs text-purple-400 mt-0.5">
+                  {form.billing_enabled
+                    ? 'Bill Generator & Sales Analytics enabled'
+                    : 'Billing feature is hidden for this restaurant'}
+                </p>
+              </div>
+              <button
+                onClick={() => setForm({ ...form, billing_enabled: !form.billing_enabled })}
+                className="text-purple-400 hover:text-white transition-colors"
+              >
+                {form.billing_enabled
+                  ? <ToggleRight size={36} className="text-amber-400" />
                   : <ToggleLeft size={36} className="text-purple-600" />
                 }
               </button>

@@ -90,3 +90,22 @@ export interface AdminStats {
   expiredRestaurants: number;
   unboundQRs: number;
 }
+
+export interface BillItem {
+  id: string;
+  name: string;
+  category: string;
+  price: number; // unit price
+  qty: number;
+  subtotal: number; // price * qty
+}
+
+export interface Bill {
+  id: string;
+  invoice_no: string;
+  items: BillItem[];
+  subtotal: number; // sum of all item subtotals
+  total: number;    // = subtotal (no tax)
+  note: string;     // optional table / order note
+  created_at: Timestamp;
+}

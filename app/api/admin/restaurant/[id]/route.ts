@@ -51,6 +51,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         uid: r.uid,
         ai_import_limit: (r.ai_import_limit as number) ?? 5,
         ai_imports_this_month: aiImportsThisMonth,
+        billing_enabled: (r.billing_enabled as boolean) ?? false,
       },
       menuItems: itemsSnap.docs.map((d) => {
         const data = d.data();
@@ -70,12 +71,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// POST /api/admin/restaurant/[id] — update plan/status/ai_import_limit
+// POST /api/admin/restaurant/[id] — update plan/status/ai_import_limit/billing_enabled
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await verifyAdmin();
     const { id } = await params;
-    const body = await request.json() as { plan?: string; plan_expires_at?: string; is_active?: boolean; ai_import_limit?: number };
+    const body = await request.json() as { plan?: string; plan_expires_at?: string; is_active?: boolean; ai_import_limit?: number; billing_enabled?: boolean };
 
     const adminDb = getAdminDb();
     const update: Record<string, unknown> = {};
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (typeof body.ai_import_limit === 'number' && body.ai_import_limit >= 0) {
       update.ai_import_limit = body.ai_import_limit;
     }
+    if (typeof body.billing_enabled === 'boolean') update.billing_enabled = body.billing_enabled;
 
     await adminDb.collection('restaurants').doc(id).update(update);
     return NextResponse.json({ success: true });

@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, UtensilsCrossed, Settings, Tag, LogOut, Menu, X } from 'lucide-react';
+import { Home, UtensilsCrossed, Settings, Tag, LogOut, Menu, X, Receipt } from 'lucide-react';
 import { deleteSession } from '@/app/actions/auth';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-const navItems = [
+const baseNavItems = [
   { label: 'Home',       href: '/dashboard/home',       icon: Home },
   { label: 'Menu',       href: '/dashboard/menu',       icon: UtensilsCrossed },
   { label: 'Categories', href: '/dashboard/categories', icon: Tag },
@@ -19,18 +19,44 @@ const navItems = [
 interface DashboardLayoutProps {
   children: React.ReactNode;
   restaurantName?: string;
+  billingEnabled?: boolean;
 }
 
-export function DashboardLayout({ children, restaurantName }: DashboardLayoutProps) {
+export function DashboardLayout({ children, restaurantName, billingEnabled }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Also read billing flag from session storage to avoid prop-drilling on pages that don't pass it
+  const [billingAllowed, setBillingAllowed] = useState(billingEnabled ?? false);
+
+  useEffect(() => {
+    if (typeof billingEnabled === 'boolean') {
+      setBillingAllowed(billingEnabled);
+      sessionStorage.setItem('billing_enabled', billingEnabled ? '1' : '0');
+    } else {
+      // Try to restore from session storage (other pages don't re-fetch)
+      const stored = sessionStorage.getItem('billing_enabled');
+      if (stored !== null) setBillingAllowed(stored === '1');
+    }
+  }, [billingEnabled]);
 
   async function handleLogout() {
     await signOut(auth);
     await deleteSession();
+    sessionStorage.removeItem('billing_enabled');
     router.push('/dashboard/login');
   }
+
+  // Build nav items — insert Billing after Menu if enabled
+  const navItems = billingAllowed
+    ? [
+        { label: 'Home',       href: '/dashboard/home',       icon: Home },
+        { label: 'Menu',       href: '/dashboard/menu',       icon: UtensilsCrossed },
+        { label: 'Billing',    href: '/dashboard/billing',    icon: Receipt },
+        { label: 'Categories', href: '/dashboard/categories', icon: Tag },
+        { label: 'Setup',      href: '/dashboard/setup',      icon: Settings },
+      ]
+    : baseNavItems;
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>

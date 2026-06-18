@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ToastProvider } from '@/components/ui/Toast';
 import { StarRating } from '@/components/ui/StarRating';
-import { Heart, Star, UtensilsCrossed, MessageSquare, Clock } from 'lucide-react';
+import {
+  Heart, Star, UtensilsCrossed, MessageSquare, Clock,
+  IndianRupee, ShoppingBag, TrendingUp, Award,
+} from 'lucide-react';
 
 function formatDate(iso: string | null) {
   if (!iso) return '';
@@ -20,6 +23,11 @@ function daysRemaining(iso: string | null) {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
+function shortDay(dateStr: string) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-IN', { weekday: 'short' });
+}
+
 interface MenuItem {
   id: string; name: string; category: string; price: number;
   like_count: number; avg_rating: number; review_count: number; image_url: string | null;
@@ -32,12 +40,22 @@ interface Review {
 interface Restaurant {
   id: string; name: string; phone: string; location: string; logo_url: string;
   qr_slug: string; plan: string; is_active: boolean; plan_expires_at: string | null;
+  billing_enabled: boolean;
+}
+
+interface SalesSummary {
+  totalRevenue: number;
+  totalOrders: number;
+  avgOrderValue: number;
+  last7Days: { date: string; revenue: number }[];
+  topItems: { id: string; name: string; totalQty: number; totalRevenue: number }[];
 }
 
 export default function DashboardHomePage() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [salesSummary, setSalesSummary] = useState<SalesSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -49,6 +67,7 @@ export default function DashboardHomePage() {
         setRestaurant(data.restaurant);
         setMenuItems(data.menuItems);
         setReviews(data.reviews);
+        setSalesSummary(data.salesSummary ?? null);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -79,9 +98,12 @@ export default function DashboardHomePage() {
   const topRated = [...menuItems].filter((i) => i.review_count > 0).sort((a, b) => b.avg_rating - a.avg_rating).slice(0, 3);
   const days = daysRemaining(restaurant.plan_expires_at);
 
+  // Bar chart helpers
+  const maxRevenue = salesSummary ? Math.max(...salesSummary.last7Days.map((d) => d.revenue), 1) : 1;
+
   return (
     <ToastProvider>
-      <DashboardLayout restaurantName={restaurant.name}>
+      <DashboardLayout restaurantName={restaurant.name} billingEnabled={restaurant.billing_enabled}>
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* Welcome */}
@@ -128,6 +150,92 @@ export default function DashboardHomePage() {
               </div>
             ))}
           </div>
+
+          {/* ── Sales Analytics ─────────────────────────────────────────── */}
+          {salesSummary && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <TrendingUp size={18} style={{ color: 'var(--db-accent)' }} />
+                <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--db-text)' }}>Sales Analytics</h2>
+                <span className="db-badge db-badge-success" style={{ marginLeft: 4 }}>Last 90 days</span>
+              </div>
+
+              {/* Revenue stat cards */}
+              <div className="db-stats-grid">
+                {[
+                  { label: 'Total Revenue',    value: formatPrice(salesSummary.totalRevenue), icon: IndianRupee, color: '#16a34a', bg: '#f0fdf4' },
+                  { label: 'Total Orders',     value: salesSummary.totalOrders,               icon: ShoppingBag, color: '#c8622a', bg: '#fff3ec' },
+                  { label: 'Avg Order Value',  value: formatPrice(salesSummary.avgOrderValue), icon: TrendingUp,  color: '#7c3aed', bg: '#f5f3ff' },
+                ].map(({ label, value, icon: Icon, color, bg }) => (
+                  <div key={label} className="db-stat">
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                      <Icon size={20} style={{ color }} />
+                    </div>
+                    <p style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--db-text)', lineHeight: 1 }}>{value}</p>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--db-text-muted)', marginTop: 4 }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="db-two-col">
+                {/* 7-day revenue bar chart */}
+                <div className="db-card" style={{ padding: 20 }}>
+                  <h3 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', marginBottom: 16 }}>
+                    Last 7 Days Revenue
+                  </h3>
+                  {salesSummary.last7Days.every((d) => d.revenue === 0) ? (
+                    <p style={{ fontSize: '0.875rem', color: 'var(--db-text-muted)', textAlign: 'center', padding: '20px 0' }}>No sales yet — start generating bills!</p>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120 }}>
+                      {salesSummary.last7Days.map((d) => {
+                        const pct = Math.max((d.revenue / maxRevenue) * 100, d.revenue > 0 ? 4 : 0);
+                        return (
+                          <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
+                            <span style={{ fontSize: '0.6rem', color: 'var(--db-text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              {d.revenue > 0 ? `₹${Math.round(d.revenue)}` : ''}
+                            </span>
+                            <div
+                              title={`${shortDay(d.date)}: ₹${d.revenue}`}
+                              style={{
+                                width: '100%', borderRadius: '6px 6px 0 0',
+                                background: d.revenue > 0 ? 'var(--db-accent)' : 'var(--db-border)',
+                                height: `${pct}%`,
+                                minHeight: d.revenue > 0 ? 6 : 2,
+                                transition: 'height 0.4s ease',
+                              }}
+                            />
+                            <span style={{ fontSize: '0.65rem', color: 'var(--db-text-muted)', fontWeight: 500 }}>{shortDay(d.date)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Top selling items */}
+                <div className="db-card" style={{ padding: 20 }}>
+                  <h3 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Award size={13} style={{ color: 'var(--db-gold)' }} /> Top Sellers
+                  </h3>
+                  {salesSummary.topItems.length === 0 ? (
+                    <p style={{ fontSize: '0.875rem', color: 'var(--db-text-muted)' }}>No sales data yet</p>
+                  ) : (
+                    salesSummary.topItems.map((item, i) => (
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--db-border)' }} className="last:border-0">
+                        <span style={{ width: 24, height: 24, borderRadius: '50%', background: i === 0 ? '#d4a853' : i === 1 ? '#b8c4cc' : i === 2 ? '#c8916a' : 'var(--db-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 700, color: i < 3 ? '#fff' : 'var(--db-text-muted)', flexShrink: 0 }}>
+                          {i + 1}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--db-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
+                          <p style={{ fontSize: '0.72rem', color: 'var(--db-text-muted)' }}>{formatPrice(item.totalRevenue)} · {item.totalQty} sold</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Top lists */}
           <div className="db-two-col">
