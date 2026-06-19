@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Heart, MapPin, Star, MessageSquare, Search, Flame, X, ChevronDown } from 'lucide-react';
-import { getVisitorToken, getCategoryIcon } from '@/lib/utils';
+import { getVisitorToken, getCategoryIcon, tierDisplayName } from '@/lib/utils';
 import { ReviewSheet } from './ReviewSheet';
 import type { Restaurant, MenuItem, Category, PricingTiers } from '@/types';
 
@@ -15,24 +15,40 @@ interface Props {
 
 // ─── Pricing helpers ──────────────────────────────────────────────────────────
 
+/** Extract all pricing tiers, sorting standard ones first, then custom ones. */
+function getTiers(p: PricingTiers): Array<{ label: string; value: number }> {
+  const tiersList: Array<{ label: string; value: number }> = [];
+  
+  if (p.full  !== undefined) tiersList.push({ label: 'Full',     value: p.full });
+  if (p.half  !== undefined) tiersList.push({ label: 'Half',     value: p.half });
+  if (p.qtr   !== undefined) tiersList.push({ label: 'Qtr',      value: p.qtr });
+  if (p.piece !== undefined) tiersList.push({ label: '/pc',      value: p.piece });
+
+  // Custom tiers — use tierDisplayName so '7inch'→7", 'small'→Small, etc.
+  const stdKeys = ['full', 'half', 'qtr', 'piece'];
+  Object.entries(p).forEach(([key, val]) => {
+    if (!stdKeys.includes(key) && typeof val === 'number') {
+      tiersList.push({ label: tierDisplayName(key), value: val });
+    }
+  });
+
+  return tiersList;
+}
+
 /** Render pricing tiers as compact stacked badges — never overflows card */
 function PriceBadges({ item }: { item: MenuItem }) {
   const p = item.pricing;
   const priceColor = '#c8622a';
   const labelColor = '#9c8e7a';
 
-  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+  const tiers = p ? getTiers(p) : [];
+
+  if (tiers.length === 0) {
     return <span style={{ fontWeight: 700, fontSize: '0.9rem', color: priceColor, whiteSpace: 'nowrap' }}>₹{item.price}</span>;
   }
 
-  const tiers: { label: string; value: number }[] = [];
-  if (p.full  !== undefined) tiers.push({ label: 'Full',  value: p.full });
-  if (p.half  !== undefined) tiers.push({ label: 'Half',  value: p.half });
-  if (p.qtr   !== undefined) tiers.push({ label: 'Qtr',   value: p.qtr });
-  if (p.piece !== undefined) tiers.push({ label: '/pc',   value: p.piece });
-
   if (tiers.length === 1) {
-    const suffix = p.piece !== undefined ? '/pc' : '';
+    const suffix = tiers[0].label === '/pc' ? '/pc' : '';
     return <span style={{ fontWeight: 700, fontSize: '0.9rem', color: priceColor, whiteSpace: 'nowrap' }}>₹{tiers[0].value}{suffix}</span>;
   }
 
@@ -52,32 +68,31 @@ function PriceBadges({ item }: { item: MenuItem }) {
 /** Full pricing grid for the item detail modal */
 function PricingTable({ item }: { item: MenuItem }) {
   const p = item.pricing;
-  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+  const tiers = p ? getTiers(p) : [];
+
+  if (tiers.length === 0) {
     return (
       <div style={{ display: 'inline-flex', alignItems: 'center', background: '#fff8f0', border: '1.5px solid #f5d0a0', borderRadius: 12, padding: '8px 20px' }}>
         <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8622a' }}>₹{item.price}</span>
       </div>
     );
   }
-  const tiers: { label: string; value: number }[] = [];
-  if (p.full  !== undefined) tiers.push({ label: 'Full',      value: p.full });
-  if (p.half  !== undefined) tiers.push({ label: 'Half',      value: p.half });
-  if (p.qtr   !== undefined) tiers.push({ label: 'Qtr',       value: p.qtr });
-  if (p.piece !== undefined) tiers.push({ label: 'Per Piece', value: p.piece });
 
   if (tiers.length === 1) {
-    const suffix = p.piece !== undefined ? '/pc' : '';
+    const suffix = tiers[0].label === '/pc' ? '/pc' : '';
+    const label = tiers[0].label !== 'Full' && tiers[0].label !== '/pc' ? `${tiers[0].label}: ` : '';
     return (
       <div style={{ display: 'inline-flex', alignItems: 'center', background: '#fff8f0', border: '1.5px solid #f5d0a0', borderRadius: 12, padding: '8px 20px' }}>
-        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8622a' }}>₹{tiers[0].value}{suffix}</span>
+        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8622a' }}>{label}₹{tiers[0].value}{suffix}</span>
       </div>
     );
   }
+
   return (
-    <div style={{ display: 'flex', width: '100%', border: '1.5px solid #ece7dc', borderRadius: 14, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', width: '100%', border: '1.5px solid #ece7dc', borderRadius: 14, overflow: 'hidden', flexWrap: 'wrap' }}>
       {tiers.map((t, idx) => (
-        <div key={t.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 4px', background: idx % 2 === 0 ? '#fff8f0' : '#fdfaf5', borderRight: idx < tiers.length - 1 ? '1px solid #ece7dc' : 'none' }}>
-          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#9c8e7a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{t.label}</span>
+        <div key={t.label} style={{ flex: '1 1 0px', minWidth: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 4px', background: idx % 2 === 0 ? '#fff8f0' : '#fdfaf5', borderRight: idx < tiers.length - 1 ? '1px solid #ece7dc' : 'none', borderBottom: '1px solid #ece7dc' }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#9c8e7a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{t.label === '/pc' ? 'Piece' : t.label}</span>
           <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#c8622a' }}>₹{t.value}</span>
         </div>
       ))}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getGroqClient } from '@/lib/groq';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { cookies } from 'next/headers';
+import { normalizePricingKey } from '@/lib/utils';
 import type { PricingTiers } from '@/types';
 
 export const runtime = 'nodejs';
@@ -19,7 +20,10 @@ interface MenuItemExtracted {
  * Returns the first defined tier value (full > half > qtr > piece).
  */
 function basePriceFromTiers(pricing: PricingTiers): number {
-  return pricing.full ?? pricing.half ?? pricing.qtr ?? pricing.piece ?? 0;
+  const std = pricing.full ?? pricing.half ?? pricing.qtr ?? pricing.piece;
+  if (std !== undefined) return std;
+  const values = Object.values(pricing).filter((v): v is number => typeof v === 'number' && v > 0);
+  return values[0] ?? 0;
 }
 
 /**
@@ -105,10 +109,25 @@ function normalizeItem(item: MenuItemExtracted): MenuItemExtracted | null {
   if (item.pricing && typeof item.pricing === 'object') {
     const p = item.pricing as Record<string, unknown>;
     const num = (v: unknown) => typeof v === 'number' ? v : (typeof v === 'string' ? parseFloat(v) : NaN);
-    if (!isNaN(num(p.full))  && num(p.full)  > 0) pricing.full  = num(p.full);
-    if (!isNaN(num(p.half))  && num(p.half)  > 0) pricing.half  = num(p.half);
-    if (!isNaN(num(p.qtr))   && num(p.qtr)   > 0) pricing.qtr   = num(p.qtr);
-    if (!isNaN(num(p.piece)) && num(p.piece) > 0) pricing.piece = num(p.piece);
+    for (const [key, val] of Object.entries(p)) {
+      const n = num(val);
+      if (!isNaN(n) && n > 0) {
+        let canonical = normalizePricingKey(key);
+        // Guard: if the AI returned a bare integer key (e.g. "7","10","12") AND
+        // the price is a realistic food price (> 20 ₹), it almost certainly means
+        // an inch-based pizza size. Convert to canonical form.
+        if (/^\d+$/.test(canonical)) {
+          const keyNum = parseInt(canonical, 10);
+          if (keyNum >= 6 && keyNum <= 16 && n >= 20) {
+            canonical = `${keyNum}inch`;
+          }
+        }
+        // If two raw keys collapse to the same canonical, keep the higher price
+        if (pricing[canonical] === undefined || n > (pricing[canonical] as number)) {
+          pricing[canonical] = n;
+        }
+      }
+    }
   }
 
   // Fallback: AI returned old-style single `price` field and no `pricing`
@@ -117,7 +136,12 @@ function normalizeItem(item: MenuItemExtracted): MenuItemExtracted | null {
     const singlePrice = typeof raw.price === 'number'
       ? raw.price
       : parseFloat(String(raw.price ?? '0')) || 0;
-    if (singlePrice > 0) pricing = { full: singlePrice };
+    // For bread/add-on categories, default to piece pricing
+    const catLower = category.toLowerCase();
+    const isPiece = catLower.includes('bread') || catLower.includes('roti') ||
+      catLower.includes('naan') || catLower.includes('paratha') ||
+      catLower.includes('raita') || catLower.includes('add-on') || catLower.includes('extra');
+    if (singlePrice > 0) pricing = isPiece ? { piece: singlePrice } : { full: singlePrice };
   }
 
   const price = basePriceFromTiers(pricing);
@@ -127,53 +151,116 @@ function normalizeItem(item: MenuItemExtracted): MenuItemExtracted | null {
 async function extractWithGroq(imageBase64: string, strict = false): Promise<MenuItemExtracted[]> {
   const groq = getGroqClient();
 
-  const prompt = strict
-    ? `You are a precise menu data extractor for Indian restaurant menus.
+  // ─── FIRST ATTEMPT: focused, example-heavy prompt ────────────────────────
+  const lenientPrompt = `You extract menu items from restaurant menu images.
+Return ONLY a raw JSON array. Start with [, end with ]. No markdown, no code fences.
 
-OUTPUT FORMAT: Return ONLY a raw JSON array — no markdown, no explanation, no code fences.
-Start your response with [ and end with ].
+Each item must be a JSON object:
+{"name":"dish name","category":"section heading","pricing":{...},"description":"one-line max 12 words"}
 
-Each element must be a JSON object with exactly these keys:
-  "name"        – string: the dish name exactly as written in the image
-  "category"    – string: the section heading this item belongs to (e.g. "Non Veg Starters", "Breads", "Rice", "Pure Veg", "Raita", "Roomali Rolls")
-  "pricing"     – object: include ONLY the price tier keys visible for this item:
-                    "full"  (number) – full plate/serving price
-                    "half"  (number) – half plate price
-                    "qtr"   (number) – quarter plate price
-                    "piece" (number) – per piece price
-  "description" – string: a short appetising one-line description of max 12 words.
-                  If a description is printed in the image, use it.
-                  If not, write one yourself based on the item name and category.
-                  Never leave this empty.
+PRICING KEY RULES — choose the right key for every price:
+  "full"   → single plate / full-size price for curries, rice, sandwiches, soups, starters, etc.
+  "half"   → half plate price (only if menu shows Half column)
+  "qtr"    → quarter plate price (only if menu shows Quarter/Qtr column)
+  "piece"  → per-piece price for: rotis, naans, parathas, kulchas, raitas, or any Add-on/Extra
+  "small"  → small size (S / Sm / Small)
+  "medium" → medium size (M / Med / Medium)
+  "large"  → large size (L / Lg / Large)
+  "xlarge" → extra-large size (XL)
+  "7inch"  → 7-inch pizza/item  (written as 7", 7 inch, 7")
+  "9inch"  → 9-inch pizza/item
+  "10inch" → 10-inch pizza/item
+  "12inch" → 12-inch pizza/item
+  (add "inch" suffix for any inch-based size: 6inch, 8inch, 11inch, 14inch, etc.)
 
-PRICING RULES:
-  STEP 1 — Read column headers (FULL, HALF, QTR) printed in the image and map each price to its column key.
-  STEP 2 — Single unlabeled price: use "piece" for Breads/Roti/Naan/Parantha/Raita; use "full" for everything else.
-  STEP 3 — Never invent prices. Only include numbers actually printed in the image.
+CRITICAL RULES:
+  1. Column HEADERS (7", Small, Full) become KEYS. Price NUMBERS (₹149, ₹299) become VALUES.
+     WRONG: {"full":7}   RIGHT: {"7inch":149}
+  2. Breads/rotis/naans always use "piece". Never use "full" for bread items.
+  3. Add-on / Extras sections: category="Add-ons", key="piece" for every item.
+  4. Only include prices actually printed in the image. Never invent prices.
+  5. If a pizza only has 2 of 3 size columns, only include those 2 sizes.
+  6. Never leave "description" empty.
 
-Examples:
-[{"name":"Butter Chicken","category":"Non Veg Starters","pricing":{"full":500,"half":300,"qtr":200},"description":"Tender chicken in rich, velvety tomato-butter gravy"},
- {"name":"Tandoori Roti","category":"Breads","pricing":{"piece":15},"description":"Freshly baked whole-wheat bread from the clay oven"},
- {"name":"Butter Naan","category":"Breads","pricing":{"piece":40},"description":"Soft leavened bread brushed with golden butter"},
- {"name":"Boondi Raita","category":"Raita","pricing":{"piece":100},"description":"Cool yoghurt tempered with roasted cumin and boondi"},
- {"name":"Chicken Biryani","category":"Rice","pricing":{"full":200},"description":"Aromatic basmati rice slow-cooked with spiced chicken"}]
+EXAMPLES (study carefully):
+[
+  {"name":"Butter Chicken","category":"Non Veg Gravy","pricing":{"full":320,"half":180,"qtr":120},"description":"Tender chicken in velvety tomato-butter gravy"},
+  {"name":"Veg Fried Rice","category":"Rice","pricing":{"full":160,"half":100},"description":"Wok-tossed rice with crisp vegetables and soy"},
+  {"name":"Veg Sandwich","category":"Sandwich","pricing":{"full":70},"description":"Classic veg sandwich with fresh vegetables"},
+  {"name":"Coleslaw Sandwich","category":"Sandwich","pricing":{"full":80},"description":"Creamy coleslaw sandwich with capsicum and mayo"},
+  {"name":"Tandoori Roti","category":"Breads","pricing":{"piece":15},"description":"Whole-wheat bread baked fresh in a clay oven"},
+  {"name":"Butter Naan","category":"Breads","pricing":{"piece":25},"description":"Soft buttery naan from the clay oven"},
+  {"name":"Margherita Pizza","category":"Pizza","pricing":{"7inch":150,"10inch":249,"12inch":349},"description":"Classic pizza with mozzarella and fresh basil"},
+  {"name":"Chicken Pizza","category":"Pizza","pricing":{"small":199,"medium":299,"large":399},"description":"Loaded with juicy chicken chunks and peppers"},
+  {"name":"Mango Shake","category":"Beverages","pricing":{"small":80,"large":120},"description":"Thick chilled mango shake with fresh pulp"},
+  {"name":"Tandoori Mayonnaise","category":"Add-ons","pricing":{"piece":30},"description":"Smoky tandoori mayo add-on for any dish"},
+  {"name":"Extra Cheese","category":"Add-ons","pricing":{"piece":30},"description":"Add extra melted cheese to any dish"}
+]
 
-Now extract ALL items from the image:`
-    : `You are extracting items from an Indian restaurant menu image.
-Return ONLY a JSON array (start with [, end with ]). No markdown, no explanation.
+Now extract ALL items visible in the image:`;
 
-Each object must have:
-  "name"     – string: dish name as written
-  "category" – string: section heading (e.g. "Non Veg Starters", "Breads", "Rice", "Pure Veg", "Raita")
-  "pricing"  – object with only the tiers visible in the image:
-               • "full" / "half" / "qtr" — read from column headers; map each price to its header key
-               • "piece" — use for Breads/Roti/Naan/Parantha/Raita with a single unlabeled price
-               • "full" — use for everything else with a single unlabeled price
-               Never invent prices; include only numbers printed in the image.
-  "description" – string: max 12-word appetising one-liner.
-                  Use the description printed in the image if present.
-                  Otherwise write one based on the item name. Never leave empty.`;
+  // ─── RETRY PROMPT: same rules, even more explicit ─────────────────────────
+  const strictPrompt = `You are a precise menu data extractor. The first extraction attempt failed.
+Extract every item from the menu image.
 
+Return ONLY a raw JSON array. Start with [. End with ]. No markdown.
+
+Each element: {"name":"...","category":"...","pricing":{...},"description":"..."}
+
+HOW TO BUILD THE PRICING OBJECT:
+
+For column-based menus (FULL | HALF | QTR columns or size columns):
+  Read the column header → that header text becomes the JSON key.
+  Read the price in that column for each row → that price becomes the JSON value.
+  Header mapping:
+    FULL or Full Plate  → "full"
+    HALF or Half Plate  → "half"
+    QTR or Quarter      → "qtr"
+    SMALL / SM / S      → "small"
+    MEDIUM / MED / M    → "medium"
+    LARGE / LG / L      → "large"
+    XL / XLARGE         → "xlarge"
+    6" / 6 inch         → "6inch"
+    7" / 7 inch         → "7inch"
+    8" / 8 inch         → "8inch"
+    9" / 9 inch         → "9inch"
+    10" / 10 inch       → "10inch"
+    12" / 12 inch       → "12inch"
+  !! The PRICE NUMBER (₹149, ₹299) goes in the VALUE. Never put an inch size (7, 10, 12) as the value.
+
+For single-price items (one price, no column header):
+  → "piece" if the item is a bread (roti, naan, paratha, kulcha, puri), raita, or add-on
+  → "full" for everything else (curry, sandwich, soup, rice, starter, etc.)
+
+For Add-on / Extras sections:
+  → category = "Add-ons"
+  → key = "piece"
+  → Extract every bullet point as its own separate item
+
+ABSOLUTE RULES:
+  A. NEVER invent prices. NEVER copy a price from one item to another.
+  B. NEVER use a bare size number (7, 10, 12) as a price value.
+  C. NEVER use abbreviations (sm, lg) as keys — always use the full canonical key.
+  D. If an item doesn't have a price for a particular size column, omit that size key.
+  E. Every item must have at least one price. Never return an empty pricing object.
+  F. Never leave description empty. Write a short appetising one-liner if not printed.
+
+EXAMPLES:
+[
+  {"name":"Butter Chicken","category":"Non Veg","pricing":{"full":320,"half":180,"qtr":120},"description":"Tender chicken in velvety tomato-butter gravy"},
+  {"name":"Veg Sandwich","category":"Sandwich","pricing":{"full":70},"description":"Classic veg sandwich with fresh vegetables"},
+  {"name":"Tandoori Roti","category":"Breads","pricing":{"piece":15},"description":"Freshly baked whole-wheat roti from the clay oven"},
+  {"name":"Butter Naan","category":"Breads","pricing":{"piece":25},"description":"Soft golden naan brushed with butter"},
+  {"name":"Margherita","category":"Pizza","pricing":{"7inch":150,"10inch":249,"12inch":349},"description":"Classic pizza with mozzarella and basil"},
+  {"name":"Chicken Tikka Pizza","category":"Pizza","pricing":{"small":199,"medium":299,"large":399},"description":"Spicy chicken tikka on a crispy pizza base"},
+  {"name":"Mango Shake","category":"Beverages","pricing":{"small":80,"large":120},"description":"Thick chilled mango shake"},
+  {"name":"Extra Cheese","category":"Add-ons","pricing":{"piece":30},"description":"Melted cheese add-on for any dish"},
+  {"name":"Schezwan Sauce","category":"Add-ons","pricing":{"piece":30},"description":"Fiery schezwan dipping sauce"}
+]
+
+Now extract ALL items from the image. Be precise. Do not skip any item.`;
+
+  const prompt = strict ? strictPrompt : lenientPrompt;
   const response = await groq.chat.completions.create({
     model: 'meta-llama/llama-4-scout-17b-16e-instruct',
     messages: [

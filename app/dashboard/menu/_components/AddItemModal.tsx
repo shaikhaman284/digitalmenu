@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Input, Textarea, Select } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { normalizePricingKey, tierDisplayName } from '@/lib/utils';
 import type { MenuItem, Category, PricingTiers } from '@/types';
 import { Upload, Wand2 } from 'lucide-react';
 import Image from 'next/image';
@@ -18,19 +19,35 @@ interface Props {
   editItem?: MenuItem | null;
 }
 
-type PricingMode = 'single' | 'full_half' | 'full_half_qtr' | 'piece';
+type PricingMode = 'single' | 'full_half' | 'full_half_qtr' | 'piece' | 'custom';
 
 const PRICING_MODES: { value: PricingMode; label: string }[] = [
-  { value: 'single', label: 'Single Price' },
-  { value: 'full_half', label: 'Full / Half' },
+  { value: 'single',        label: 'Single Price' },
+  { value: 'full_half',     label: 'Full / Half' },
   { value: 'full_half_qtr', label: 'Full / Half / Qtr' },
-  { value: 'piece', label: 'Per Piece' },
+  { value: 'piece',         label: 'Per Piece' },
+  { value: 'custom',        label: 'Custom Sizes' },
+];
+
+/** Quick-fill presets for the Custom Sizes mode */
+const SIZE_PRESETS: Array<{ label: string; tiers: Array<{ label: string; price: string }> }> = [
+  { label: 'S / M / L',             tiers: [{ label: 'small',  price: '' }, { label: 'medium', price: '' }, { label: 'large',  price: '' }] },
+  { label: 'Sm / Reg / Lg',         tiers: [{ label: 'small',  price: '' }, { label: 'regular', price: '' }, { label: 'large', price: '' }] },
+  { label: '7" / 9"',               tiers: [{ label: '7inch',  price: '' }, { label: '9inch',   price: '' }] },
+  { label: '7" / 9" / 12"',         tiers: [{ label: '7inch',  price: '' }, { label: '9inch',   price: '' }, { label: '12inch', price: '' }] },
+  { label: '6" / 8" / 10" / 12"',   tiers: [{ label: '6inch',  price: '' }, { label: '8inch',   price: '' }, { label: '10inch', price: '' }, { label: '12inch', price: '' }] },
 ];
 
 /** Detect the pricing mode from an existing item's pricing data */
 function detectPricingMode(item: MenuItem): PricingMode {
   const p = item.pricing;
   if (!p) return 'single';
+  
+  // Find if there are any keys that are not standard
+  const standardKeys = ['full', 'half', 'qtr', 'piece'];
+  const hasCustomKeys = Object.keys(p).some(key => !standardKeys.includes(key));
+  if (hasCustomKeys) return 'custom';
+
   if (p.piece !== undefined && p.full === undefined && p.half === undefined) return 'piece';
   if (p.qtr !== undefined) return 'full_half_qtr';
   if (p.half !== undefined) return 'full_half';
@@ -45,6 +62,7 @@ function buildPricing(
   half: string,
   qtr: string,
   piece: string,
+  customTiers: Array<{ label: string; price: string }>
 ): { pricing: PricingTiers; price: number } {
   let pricing: PricingTiers = {};
   switch (mode) {
@@ -60,8 +78,18 @@ function buildPricing(
     case 'piece':
       pricing = { piece: parseFloat(piece) || 0 };
       break;
+    case 'custom':
+      customTiers.forEach(({ label, price }) => {
+        // Normalise labels so typed abbreviations (7", med, lg) are canonicalised before saving
+        const canonical = normalizePricingKey(label.trim());
+        const numPrice = parseFloat(price);
+        if (canonical && !isNaN(numPrice) && numPrice > 0) {
+          pricing[canonical] = numPrice;
+        }
+      });
+      break;
   }
-  const price = pricing.full ?? pricing.half ?? pricing.qtr ?? pricing.piece ?? 0;
+  const price = pricing.full ?? pricing.half ?? pricing.qtr ?? pricing.piece ?? Object.values(pricing).find(v => typeof v === 'number' && v > 0) ?? 0;
   return { pricing, price };
 }
 
@@ -75,6 +103,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [pricingMode, setPricingMode] = useState<PricingMode>('single');
+  const [customTiers, setCustomTiers] = useState<Array<{ label: string; price: string }>>([]);
   const [form, setForm] = useState({
     name: '',
     category: categories[0]?.name || '',
@@ -93,6 +122,17 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
     if (editItem) {
       const mode = detectPricingMode(editItem);
       const p = editItem.pricing;
+      
+      const tiersList: Array<{ label: string; price: string }> = [];
+      if (mode === 'custom' && p) {
+        Object.entries(p).forEach(([key, val]) => {
+          if (typeof val === 'number') {
+            tiersList.push({ label: key, price: String(val) });
+          }
+        });
+      }
+      setCustomTiers(tiersList);
+
       setForm({
         name: editItem.name,
         category: editItem.category,
@@ -109,6 +149,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
     } else {
       setForm({ name: '', category: categories[0]?.name || '', priceSingle: '', priceFull: '', priceHalf: '', priceQtr: '', pricePiece: '', description: '', isNewCategory: false });
       setPricingMode('single');
+      setCustomTiers([]);
       setImagePreview('');
       setImageFile(null);
     }
@@ -194,7 +235,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
         description = data.description || '';
       }
 
-      const { pricing, price } = buildPricing(pricingMode, form.priceSingle, form.priceFull, form.priceHalf, form.priceQtr, form.pricePiece);
+      const { pricing, price } = buildPricing(pricingMode, form.priceSingle, form.priceFull, form.priceHalf, form.priceQtr, form.pricePiece, customTiers);
 
       if (editItem) {
         const imageUrl = await uploadImage(editItem.id);
@@ -247,7 +288,33 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
 
         {/* Category */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <label className="db-label">Category <span style={{ color: 'var(--db-accent)' }}>*</span></label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label className="db-label" style={{ marginBottom: 0 }}>Category <span style={{ color: 'var(--db-accent)' }}>*</span></label>
+            {/* Quick shortcut: set to Add-ons category + Per Piece pricing */}
+            <button
+              type="button"
+              onClick={() => {
+                // Check if an "Add-ons" category already exists (case-insensitive)
+                const existing = categories.find((c) => c.name.toLowerCase() === 'add-ons');
+                if (existing) {
+                  setForm((f) => ({ ...f, category: existing.name, isNewCategory: false }));
+                } else {
+                  setNewCategory('Add-ons');
+                  setForm((f) => ({ ...f, isNewCategory: true, category: '' }));
+                }
+                setPricingMode('piece');
+              }}
+              style={{
+                fontSize: '0.72rem', fontWeight: 600, padding: '2px 10px', borderRadius: 999,
+                border: '1px solid var(--db-border)', background: 'var(--db-surface-2)',
+                color: 'var(--db-text-muted)', cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--db-accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--db-accent)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--db-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--db-text-muted)'; }}
+            >
+              + Add-on item
+            </button>
+          </div>
           {!form.isNewCategory ? (
             <Select value={form.category}
               onChange={(e) => {
@@ -338,9 +405,111 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
           )}
 
           {pricingMode === 'piece' && (
-            <Input label="Price / Piece (₹)" type="number" min="0" step="0.5"
-              value={form.pricePiece} onChange={(e) => setForm({ ...form, pricePiece: e.target.value })}
-              placeholder="e.g. 15" required />
+            <div>
+              <Input label="Price / Piece (₹)" type="number" min="0" step="0.5"
+                value={form.pricePiece} onChange={(e) => setForm({ ...form, pricePiece: e.target.value })}
+                placeholder="e.g. 15" required />
+              <p style={{ fontSize: '0.75rem', color: 'var(--db-text-muted)', marginTop: 4 }}>
+                Use for breads, rotis, naans, and add-on extras (sauces, toppings, etc.)
+              </p>
+            </div>
+          )}
+
+          {pricingMode === 'custom' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* Quick-fill size presets */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--db-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quick Presets</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {SIZE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setCustomTiers(preset.tiers.map(t => ({ ...t })))}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: 999,
+                        fontSize: '0.78rem',
+                        fontWeight: 500,
+                        border: '1.5px solid var(--db-border)',
+                        background: 'var(--db-surface-2)',
+                        color: 'var(--db-text-2)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLElement).style.borderColor = 'var(--db-accent)';
+                        (e.currentTarget as HTMLElement).style.color = 'var(--db-accent)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLElement).style.borderColor = 'var(--db-border)';
+                        (e.currentTarget as HTMLElement).style.color = 'var(--db-text-2)';
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom tier rows */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--db-text)' }}>Custom Tiers</span>
+                <Button type="button" variant="outline" size="sm" onClick={() => setCustomTiers([...customTiers, { label: '', price: '' }])}>
+                  + Add Size
+                </Button>
+              </div>
+
+              {customTiers.length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--db-text-muted)', fontStyle: 'italic', margin: '4px 0 12px' }}>
+                  Pick a preset above or click "+ Add Size" to configure.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                  {customTiers.map((tier, index) => (
+                    <div key={index} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div style={{ flex: 2 }}>
+                        <Input
+                          placeholder={`e.g. ${tierDisplayName(tier.label || 'small')}`}
+                          value={tier.label}
+                          onChange={(e) => {
+                            const updated = [...customTiers];
+                            updated[index].label = e.target.value;
+                            setCustomTiers(updated);
+                          }}
+                          required
+                        />
+                      </div>
+                      <div style={{ flex: 1.5 }}>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          placeholder="Price (₹)"
+                          value={tier.price}
+                          onChange={(e) => {
+                            const updated = [...customTiers];
+                            updated[index].price = e.target.value;
+                            setCustomTiers(updated);
+                          }}
+                          required
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCustomTiers(customTiers.filter((_, i) => i !== index))}
+                        style={{ color: 'var(--db-red)', padding: '6px 8px', marginTop: 12 }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 

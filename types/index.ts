@@ -33,12 +33,14 @@ export interface Category {
 /**
  * Pricing tiers for a menu item.
  * At least one tier must be set. If only `full` is set, it behaves like a single price.
+ * Supports arbitrary custom labels from AI import (e.g. 'small', 'medium', '7inch').
  */
 export interface PricingTiers {
   full?: number;   // Full plate / portion price
   half?: number;   // Half plate price
   qtr?: number;    // Quarter plate price
   piece?: number;  // Per-piece price
+  [label: string]: number | undefined; // Custom labels (small/medium/large, 7inch/9inch, etc.)
 }
 
 export interface MenuItem {
@@ -95,9 +97,10 @@ export interface BillItem {
   id: string;
   name: string;
   category: string;
-  price: number; // unit price
+  price: number;        // effective unit price for the selected tier
+  pricingLabel?: string; // which tier was selected (e.g. "half", "full", "medium")
   qty: number;
-  subtotal: number; // price * qty
+  subtotal: number;     // price * qty
 }
 
 export interface Bill {

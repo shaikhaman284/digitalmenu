@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-import { resizeImage } from '@/lib/utils';
+import { resizeImage, tierDisplayName } from '@/lib/utils';
 import type { Category, MenuItemDraft, PricingTiers } from '@/types';
 import { Upload, Wand2, Plus, Trash2, CheckCircle } from 'lucide-react';
 
@@ -23,19 +23,33 @@ const stepLabels = ['Upload Photos', 'Extracting…', 'Review & Edit', 'Done!'];
 /** Compute base price from pricing tiers */
 function basePriceFromTiers(pricing?: PricingTiers): number {
   if (!pricing) return 0;
-  return pricing.full ?? pricing.half ?? pricing.qtr ?? pricing.piece ?? 0;
+  const std = pricing.full ?? pricing.half ?? pricing.qtr ?? pricing.piece;
+  if (std !== undefined) return std;
+  const values = Object.values(pricing).filter((v): v is number => typeof v === 'number' && v > 0);
+  return values[0] ?? 0;
 }
 
 /** Render compact pricing label for a draft item */
 function pricingLabel(item: MenuItemDraft): string {
   const p = item.pricing;
-  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) return item.price > 0 ? `₹${item.price}` : '—';
+  if (!p) return item.price > 0 ? `₹${item.price}` : '—';
+  
   const parts: string[] = [];
   if (p.full !== undefined) parts.push(`F:${p.full}`);
   if (p.half !== undefined) parts.push(`H:${p.half}`);
   if (p.qtr !== undefined) parts.push(`Q:${p.qtr}`);
   if (p.piece !== undefined) parts.push(`${p.piece}/pc`);
-  return parts.join(' · ') || '—';
+
+  // Custom tiers
+  const stdKeys = ['full', 'half', 'qtr', 'piece'];
+  Object.entries(p).forEach(([key, val]) => {
+    if (!stdKeys.includes(key) && typeof val === 'number') {
+      const label = key.charAt(0).toUpperCase() + key.slice(1);
+      parts.push(`${label}:${val}`);
+    }
+  });
+
+  return parts.join(' · ') || (item.price > 0 ? `₹${item.price}` : '—');
 }
 
 export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, categories }: Props) {
@@ -122,7 +136,7 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
     setItems((prev) => { const updated = [...prev]; updated[index] = { ...updated[index], [field]: value }; return updated; });
   }
 
-  function updatePricingField(index: number, tier: keyof PricingTiers, value: string) {
+  function updatePricingField(index: number, tier: string, value: string) {
     setItems((prev) => {
       const updated = [...prev];
       const currentPricing = updated[index].pricing ?? {};
@@ -201,6 +215,31 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
 
   const remainingImports = importLimit - importCount;
 
+  // Compute the precise set of pricing columns to show.
+  // Rules:
+  //  1. A standard key (full/half/qtr/piece) is shown ONLY if at least one item has a non-zero value for it.
+  //  2. 'full' is ALWAYS included as a fallback (manually-added rows need somewhere to enter a single price).
+  //  3. All custom size keys (small/medium/large/7inch/...) used by any item are included.
+  //  4. This avoids showing empty Half/Qtr columns when the menu is pizza-only.
+  const usedKeys = new Set<string>();
+  items.forEach((item) => {
+    if (item.pricing) {
+      Object.entries(item.pricing).forEach(([k, v]) => {
+        if (typeof v === 'number' && v > 0) usedKeys.add(k);
+      });
+    }
+  });
+
+  const defaultKeys = ['full', 'half', 'qtr', 'piece'];
+  const displayPricingKeys = [
+    // Always include 'full' — single-price items (sandwiches, curries without tiers) land here
+    'full',
+    // Other standard keys only if at least one item actually uses them
+    ...['half', 'qtr', 'piece'].filter((k) => usedKeys.has(k)),
+    // Custom size keys (small / medium / large / 7inch / ...)
+    ...Array.from(usedKeys).filter((k) => !defaultKeys.includes(k)),
+  ];
+
   const cellStyle: React.CSSProperties = { padding: '6px 8px', verticalAlign: 'top' };
   const inlineInputStyle: React.CSSProperties = {
     width: '100%',
@@ -246,7 +285,7 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
       {step === 1 && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: '0.875rem', color: 'var(--db-text-2)' }}>
-            Upload photos of your existing menu (up to 5). Our AI will extract all items and their pricing tiers (Full/Half/Qtr) automatically.
+            Upload photos of your existing menu (up to 5). Our AI will extract items, pricing tiers (Full/Half/Qtr), pizza sizes (S/M/L, 7"/9"), per-piece prices (breads/rotis), and add-on sections.
             <span style={{ display: 'block', marginTop: 4, fontSize: '0.8rem', color: 'var(--db-text-muted)' }}>
               Imports remaining this month:{' '}
               {countLoading
@@ -308,16 +347,25 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
           </div>
 
           {/* Pricing legend */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--db-text-muted)' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--db-text-muted)', alignItems: 'center' }}>
             <span style={{ fontWeight: 600 }}>Price columns:</span>
-            <span>Full = full plate</span>
-            <span>·</span>
-            <span>Half = half plate</span>
-            <span>·</span>
-            <span>Qtr = quarter plate</span>
-            <span>·</span>
-            <span>Pc = per piece</span>
-            <span style={{ color: 'var(--db-text-muted)', fontStyle: 'italic' }}>(leave blank if not applicable)</span>
+            {displayPricingKeys.map((key, idx) => {
+              const LONG: Record<string, string> = {
+                full: 'single / full plate', half: 'half plate', qtr: 'quarter', piece: 'per piece / add-on',
+                small: 'Small size', medium: 'Medium size', large: 'Large size', xlarge: 'XL size',
+                regular: 'Regular size', family: 'Family size',
+              };
+              const inchM = key.match(/^(\d+)inch$/);
+              const desc = inchM ? `${inchM[1]}" pizza` : (LONG[key] ?? key);
+              return (
+                <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {idx > 0 && <span style={{ color: 'var(--db-border-2)' }}>·</span>}
+                  <span style={{ fontWeight: 600, color: 'var(--db-accent)' }}>{tierDisplayName(key)}</span>
+                  <span>= {desc}</span>
+                </span>
+              );
+            })}
+            <span style={{ fontStyle: 'italic', marginLeft: 4 }}>— auto-filled from image; edit if wrong</span>
           </div>
 
           {/* Table */}
@@ -325,9 +373,17 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
             <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--db-surface-2)', position: 'sticky', top: 0, zIndex: 1 }}>
-                  {['Name', 'Category', 'Full ₹', 'Half ₹', 'Qtr ₹', 'Pc ₹', 'Description', ''].map((h) => (
-                    <th key={h} style={{ textAlign: h === 'Full ₹' || h === 'Half ₹' || h === 'Qtr ₹' || h === 'Pc ₹' ? 'right' : 'left', padding: '8px 8px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
+                  <th style={{ textAlign: 'left', padding: '8px 8px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}>Name</th>
+                  <th style={{ textAlign: 'left', padding: '8px 8px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}>Category</th>
+                  {displayPricingKeys.map((key) => {
+                    return (
+                      <th key={key} style={{ textAlign: 'right', padding: '8px 8px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}>
+                        {tierDisplayName(key)} ₹
+                      </th>
+                    );
+                  })}
+                  <th style={{ textAlign: 'left', padding: '8px 8px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}>Description</th>
+                  <th style={{ textAlign: 'left', padding: '8px 8px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', whiteSpace: 'nowrap' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -347,46 +403,28 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
                         onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
                         onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
                     </td>
-                    {/* Full */}
-                    <td style={{ ...cellStyle, textAlign: 'right' }}>
-                      <input type="number" min="0"
-                        value={item.pricing?.full !== undefined ? item.pricing.full : (item.price > 0 && !item.pricing?.half && !item.pricing?.qtr && !item.pricing?.piece ? item.price : '')}
-                        onChange={(e) => updatePricingField(i, 'full', e.target.value)}
-                        placeholder="—"
-                        style={priceTierInputStyle}
-                        onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
-                        onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
-                    </td>
-                    {/* Half */}
-                    <td style={{ ...cellStyle, textAlign: 'right' }}>
-                      <input type="number" min="0"
-                        value={item.pricing?.half !== undefined ? item.pricing.half : ''}
-                        onChange={(e) => updatePricingField(i, 'half', e.target.value)}
-                        placeholder="—"
-                        style={priceTierInputStyle}
-                        onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
-                        onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
-                    </td>
-                    {/* Qtr */}
-                    <td style={{ ...cellStyle, textAlign: 'right' }}>
-                      <input type="number" min="0"
-                        value={item.pricing?.qtr !== undefined ? item.pricing.qtr : ''}
-                        onChange={(e) => updatePricingField(i, 'qtr', e.target.value)}
-                        placeholder="—"
-                        style={priceTierInputStyle}
-                        onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
-                        onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
-                    </td>
-                    {/* Per Piece */}
-                    <td style={{ ...cellStyle, textAlign: 'right' }}>
-                      <input type="number" min="0"
-                        value={item.pricing?.piece !== undefined ? item.pricing.piece : ''}
-                        onChange={(e) => updatePricingField(i, 'piece', e.target.value)}
-                        placeholder="—"
-                        style={priceTierInputStyle}
-                        onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
-                        onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
-                    </td>
+                    {displayPricingKeys.map((key) => {
+                      let valStr = '';
+                      if (item.pricing?.[key] !== undefined) {
+                        valStr = String(item.pricing[key]);
+                      } else if (key === 'full' && item.price > 0 && !item.pricing?.half && !item.pricing?.qtr && !item.pricing?.piece) {
+                        const customKeysExist = Object.keys(item.pricing || {}).some(k => !defaultKeys.includes(k));
+                        if (!customKeysExist) {
+                          valStr = String(item.price);
+                        }
+                      }
+                      return (
+                        <td key={key} style={{ ...cellStyle, textAlign: 'right' }}>
+                          <input type="number" min="0" step="0.5"
+                            value={valStr}
+                            onChange={(e) => updatePricingField(i, key, e.target.value)}
+                            placeholder="—"
+                            style={priceTierInputStyle}
+                            onFocus={(e) => (e.target.style.borderBottomColor = 'var(--db-accent)')}
+                            onBlur={(e) => (e.target.style.borderBottomColor = 'var(--db-border)')} />
+                        </td>
+                      );
+                    })}
                     <td style={cellStyle}>
                       <input value={item.description} onChange={(e) => updateItem(i, 'description', e.target.value)}
                         style={{ ...inlineInputStyle, minWidth: 160 }}

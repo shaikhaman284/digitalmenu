@@ -85,7 +85,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable}`} suppressHydrationWarning>
       <head>
         {/* Preconnect to Firebase Storage for faster image loads */}
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
