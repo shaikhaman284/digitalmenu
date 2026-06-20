@@ -17,6 +17,7 @@ interface PricingTiers {
   half?: number;
   qtr?: number;
   piece?: number;
+  [label: string]: number | undefined; // custom labels: small/medium/large etc.
 }
 
 interface MenuItem {
@@ -29,14 +30,29 @@ interface MenuItem {
 /** Render compact pricing display for the dashboard card */
 function PriceDisplay({ item }: { item: MenuItem }) {
   const p = item.pricing;
-  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+  if (!p || Object.keys(p).length === 0) {
     return <p style={{ fontWeight: 700, color: 'var(--db-text)', flexShrink: 0, fontSize: '0.97rem' }}>{formatPrice(item.price)}</p>;
   }
-  const tiers: { label: string; value: number }[] = [];
-  if (p.full !== undefined) tiers.push({ label: 'Full', value: p.full });
-  if (p.half !== undefined) tiers.push({ label: 'Half', value: p.half });
-  if (p.qtr !== undefined) tiers.push({ label: 'Qtr', value: p.qtr });
-  if (p.piece !== undefined) tiers.push({ label: 'Pc', value: p.piece });
+
+  // Known label display names
+  const LABEL_MAP: Record<string, string> = {
+    full: 'Full', half: 'Half', qtr: 'Qtr', piece: 'Pc',
+    small: 'Sm', medium: 'Md', large: 'Lg', regular: 'Reg', family: 'Fam',
+  };
+  const KNOWN_ORDER = ['full', 'half', 'qtr', 'piece', 'small', 'medium', 'large', 'regular', 'family'];
+
+  const tiers: { label: string; value: number }[] = Object.entries(p)
+    .filter(([, v]) => v !== undefined && (v as number) > 0)
+    .sort(([a], [b]) => {
+      const ia = KNOWN_ORDER.indexOf(a);
+      const ib = KNOWN_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    })
+    .map(([label, value]) => ({ label: LABEL_MAP[label] ?? (label.charAt(0).toUpperCase() + label.slice(1)), value: value as number }));
+
+  if (tiers.length === 0) {
+    return <p style={{ fontWeight: 700, color: 'var(--db-text)', flexShrink: 0, fontSize: '0.97rem' }}>{formatPrice(item.price)}</p>;
+  }
   if (tiers.length === 1) {
     const suffix = p.piece !== undefined ? '/pc' : '';
     return <p style={{ fontWeight: 700, color: 'var(--db-text)', flexShrink: 0, fontSize: '0.97rem' }}>{formatPrice(tiers[0].value)}{suffix}</p>;

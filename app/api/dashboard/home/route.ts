@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
       plan: restData.plan,
       is_active: restData.is_active,
       plan_expires_at: expiresAt ? expiresAt.toISOString() : null,
+      billing_enabled: (restData.billing_enabled as boolean) ?? false,
     };
 
     // Fetch menu items
@@ -122,7 +123,64 @@ export async function GET(request: NextRequest) {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
-    return NextResponse.json({ restaurant, menuItems, reviews: allReviews.slice(0, 30) });
+    // ── Sales Analytics (only when billing is enabled) ───────────────────────
+    let salesSummary = null;
+    if (restaurant.billing_enabled) {
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+      const billsSnap = await adminDb
+        .collection('restaurants')
+        .doc(restaurantId)
+        .collection('bills')
+        .where('created_at', '>=', ninetyDaysAgo)
+        .orderBy('created_at', 'desc')
+        .get();
+
+      let totalRevenue = 0;
+      const totalOrders = billsSnap.size;
+      const itemMap: Record<string, { name: string; totalQty: number; totalRevenue: number }> = {};
+
+      // Build last 7 days map (YYYY-MM-DD keys)
+      const dayMap: Record<string, number> = {};
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        dayMap[d.toLocaleDateString('en-CA')] = 0;
+      }
+
+      billsSnap.docs.forEach((d) => {
+        const b = d.data();
+        const billTotal: number = b.total || 0;
+        totalRevenue += billTotal;
+
+        // Day breakdown
+        const billDate: Date = b.created_at?.toDate?.() ?? new Date();
+        const dayKey = billDate.toLocaleDateString('en-CA');
+        if (dayKey in dayMap) dayMap[dayKey] += billTotal;
+
+        // Per-item aggregation
+        const items = (b.items || []) as Array<{ id: string; name: string; qty: number; subtotal: number }>;
+        items.forEach((it) => {
+          if (!itemMap[it.id]) itemMap[it.id] = { name: it.name, totalQty: 0, totalRevenue: 0 };
+          itemMap[it.id].totalQty += it.qty || 0;
+          itemMap[it.id].totalRevenue += it.subtotal || 0;
+        });
+      });
+
+      const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+
+      const topItems = Object.entries(itemMap)
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => b.totalQty - a.totalQty)
+        .slice(0, 5);
+
+      const last7Days = Object.entries(dayMap).map(([date, revenue]) => ({ date, revenue }));
+
+      salesSummary = { totalRevenue, totalOrders, avgOrderValue, last7Days, topItems };
+    }
+
+    return NextResponse.json({ restaurant, menuItems, reviews: allReviews.slice(0, 30), salesSummary });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to load dashboard data';
     return NextResponse.json({ error: message }, { status: 500 });

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Heart, MapPin, Star, MessageSquare, Search, Flame, X, ChevronDown } from 'lucide-react';
-import { getVisitorToken, getCategoryIcon } from '@/lib/utils';
+import { getVisitorToken, getCategoryIcon, tierDisplayName } from '@/lib/utils';
 import { ReviewSheet } from './ReviewSheet';
 import type { Restaurant, MenuItem, Category, PricingTiers } from '@/types';
 
@@ -15,33 +15,65 @@ interface Props {
 
 // ─── Pricing helpers ──────────────────────────────────────────────────────────
 
-/** Render pricing tiers as compact stacked badges — never overflows card */
+/** Sort order weight for a tier key. Lower = appears first. */
+function tierSortWeight(key: string): number {
+  // Standard portions in logical order
+  const STD: Record<string, number> = { full: 0, half: 1, qtr: 2, piece: 3 };
+  if (STD[key] !== undefined) return STD[key];
+
+  // Named sizes (small → large)
+  const NAMED: Record<string, number> = {
+    small: 10, regular: 11, medium: 12, large: 13, xlarge: 14, xxlarge: 15, family: 16,
+  };
+  if (NAMED[key] !== undefined) return NAMED[key];
+
+  // Inch sizes — parse digit and put in numeric order (e.g. 7inch=107, 12inch=112)
+  const inchMatch = key.match(/^(\d+)inch$/);
+  if (inchMatch) return 100 + parseInt(inchMatch[1], 10);
+
+  // Unknown custom keys — sort alphabetically at the end
+  return 200;
+}
+
+/** Extract all pricing tiers in logical sort order. */
+function getTiers(p: PricingTiers): Array<{ key: string; label: string; value: number }> {
+  return Object.entries(p)
+    .filter(([, v]) => typeof v === 'number' && (v as number) > 0)
+    .sort(([a], [b]) => tierSortWeight(a) - tierSortWeight(b))
+    .map(([key, val]) => ({
+      key,
+      label: key === 'piece' ? '/pc' : tierDisplayName(key),
+      value: val as number,
+    }));
+}
+
+/** Compact price display used on the item card in the list */
 function PriceBadges({ item }: { item: MenuItem }) {
   const p = item.pricing;
   const priceColor = '#c8622a';
   const labelColor = '#9c8e7a';
 
-  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+  const tiers = p ? getTiers(p) : [];
+
+  // No pricing object — fall back to plain price
+  if (tiers.length === 0) {
     return <span style={{ fontWeight: 700, fontSize: '0.9rem', color: priceColor, whiteSpace: 'nowrap' }}>₹{item.price}</span>;
   }
 
-  const tiers: { label: string; value: number }[] = [];
-  if (p.full  !== undefined) tiers.push({ label: 'Full',  value: p.full });
-  if (p.half  !== undefined) tiers.push({ label: 'Half',  value: p.half });
-  if (p.qtr   !== undefined) tiers.push({ label: 'Qtr',   value: p.qtr });
-  if (p.piece !== undefined) tiers.push({ label: '/pc',   value: p.piece });
-
+  // Single tier (e.g. piece/full only)
   if (tiers.length === 1) {
-    const suffix = p.piece !== undefined ? '/pc' : '';
+    const suffix = tiers[0].key === 'piece' ? '/pc' : '';
     return <span style={{ fontWeight: 700, fontSize: '0.9rem', color: priceColor, whiteSpace: 'nowrap' }}>₹{tiers[0].value}{suffix}</span>;
   }
 
-  // Stack tiers vertically — no horizontal overflow
+  // Multiple tiers — stack each label + price on its own row (same style as before)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
       {tiers.map((t) => (
-        <span key={t.label} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, lineHeight: 1.3 }}>
-          <span style={{ fontSize: '0.65rem', color: labelColor, fontWeight: 500, letterSpacing: '0.02em' }}>{t.label}</span>
+        <span key={t.key} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, lineHeight: 1.3 }}>
+          <span style={{ fontSize: '0.65rem', color: labelColor, fontWeight: 500, letterSpacing: '0.02em' }}>
+            {t.key === 'piece' ? '/pc' : t.label}
+          </span>
           <span style={{ fontSize: '0.82rem', fontWeight: 700, color: priceColor, whiteSpace: 'nowrap' }}>₹{t.value}</span>
         </span>
       ))}
@@ -49,38 +81,60 @@ function PriceBadges({ item }: { item: MenuItem }) {
   );
 }
 
-/** Full pricing grid for the item detail modal */
+
+/** Full pricing grid displayed inside the item detail bottom sheet */
 function PricingTable({ item }: { item: MenuItem }) {
   const p = item.pricing;
-  if (!p || (!p.full && !p.half && !p.qtr && !p.piece)) {
+  const tiers = p ? getTiers(p) : [];
+
+  // No pricing — show plain price
+  if (tiers.length === 0) {
     return (
       <div style={{ display: 'inline-flex', alignItems: 'center', background: '#fff8f0', border: '1.5px solid #f5d0a0', borderRadius: 12, padding: '8px 20px' }}>
         <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8622a' }}>₹{item.price}</span>
       </div>
     );
   }
-  const tiers: { label: string; value: number }[] = [];
-  if (p.full  !== undefined) tiers.push({ label: 'Full',      value: p.full });
-  if (p.half  !== undefined) tiers.push({ label: 'Half',      value: p.half });
-  if (p.qtr   !== undefined) tiers.push({ label: 'Qtr',       value: p.qtr });
-  if (p.piece !== undefined) tiers.push({ label: 'Per Piece', value: p.piece });
 
+  // Single tier
   if (tiers.length === 1) {
-    const suffix = p.piece !== undefined ? '/pc' : '';
+    const { key, value } = tiers[0];
+    const suffix = key === 'piece' ? '/pc' : '';
+    const labelPrefix = (key !== 'full' && key !== 'piece') ? `${tiers[0].label}: ` : '';
     return (
       <div style={{ display: 'inline-flex', alignItems: 'center', background: '#fff8f0', border: '1.5px solid #f5d0a0', borderRadius: 12, padding: '8px 20px' }}>
-        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8622a' }}>₹{tiers[0].value}{suffix}</span>
+        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8622a' }}>{labelPrefix}₹{value}{suffix}</span>
       </div>
     );
   }
+
+  // Multiple tiers — render a responsive grid
   return (
-    <div style={{ display: 'flex', width: '100%', border: '1.5px solid #ece7dc', borderRadius: 14, overflow: 'hidden' }}>
-      {tiers.map((t, idx) => (
-        <div key={t.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 4px', background: idx % 2 === 0 ? '#fff8f0' : '#fdfaf5', borderRight: idx < tiers.length - 1 ? '1px solid #ece7dc' : 'none' }}>
-          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#9c8e7a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{t.label}</span>
-          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#c8622a' }}>₹{t.value}</span>
-        </div>
-      ))}
+    <div style={{ width: '100%' }}>
+      <p style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9c8e7a', marginBottom: 8 }}>
+        Available Sizes &amp; Prices
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(tiers.length, 4)}, 1fr)`, gap: 8 }}>
+        {tiers.map((t, idx) => (
+          <div
+            key={t.key}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '10px 6px', borderRadius: 12,
+              background: idx === 0 ? '#fff3ec' : '#fdfaf5',
+              border: `1.5px solid ${idx === 0 ? '#f5c896' : '#ece7dc'}`,
+            }}
+          >
+            <span style={{
+              fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.06em', color: idx === 0 ? '#b05a20' : '#9c8e7a', marginBottom: 4,
+            }}>
+              {t.key === 'piece' ? 'Per Piece' : t.label}
+            </span>
+            <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#c8622a' }}>₹{t.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

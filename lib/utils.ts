@@ -137,3 +137,52 @@ export function getCategoryIcon(category: string): string {
   if (lower.includes('starter') || lower.includes('appetizer')) return '🍢';
   return '🍽️';
 }
+
+/**
+ * Canonicalise a raw pricing key coming from the AI or typed by the user.
+ *
+ * Handles:
+ *  - Abbreviations:  sm→small, med→medium, lg→large, xl→xlarge, reg→regular
+ *  - Single letters: s→small, m→medium, l→large
+ *  - Inch notation:  7"→7inch, 9 inch→9inch, 6in→6inch, 12"→12inch
+ *
+ * Keys that are already canonical (full/half/qtr/piece/small/…) pass through unchanged.
+ */
+export function normalizePricingKey(raw: string): string {
+  const k = raw.trim().toLowerCase();
+
+  // Inch notation — matches: 6", 7 inch, 8in, 9inch, 10 inches, 12"
+  const inchMatch = k.match(/^(\d+)\s*(?:inch(?:es)?|in|")$/);
+  if (inchMatch) return `${inchMatch[1]}inch`;
+
+  const ALIASES: Record<string, string> = {
+    // Single-letter shortcuts (must stay after inch check to avoid 'in' collision)
+    s: 'small', sm: 'small',
+    m: 'medium', med: 'medium',
+    l: 'large', lg: 'large',
+    xl: 'xlarge', xxl: 'xxlarge',
+    reg: 'regular', r: 'regular',
+    fam: 'family',
+  };
+  return ALIASES[k] ?? k;
+}
+
+/**
+ * Human-readable display name for a pricing tier key.
+ *
+ * Examples:  full→Full  half→Half  7inch→7"  small→Small  xlarge→XL
+ */
+export function tierDisplayName(key: string): string {
+  const NAMED: Record<string, string> = {
+    full: 'Full', half: 'Half', qtr: 'Qtr', piece: 'Per Piece',
+    small: 'Small', medium: 'Medium', large: 'Large',
+    xlarge: 'XL', xxlarge: 'XXL',
+    regular: 'Regular', family: 'Family',
+  };
+  if (NAMED[key]) return NAMED[key];
+  // inch keys: 7inch → 7"
+  const inchMatch = key.match(/^(\d+)inch$/);
+  if (inchMatch) return `${inchMatch[1]}"`;
+  // fallback: capitalise first letter
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
