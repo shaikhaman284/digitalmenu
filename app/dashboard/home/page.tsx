@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ToastProvider } from '@/components/ui/Toast';
 import { StarRating } from '@/components/ui/StarRating';
 import {
   Heart, Star, UtensilsCrossed, MessageSquare, Clock,
-  IndianRupee, ShoppingBag, TrendingUp, Award,
+  IndianRupee, ShoppingBag, TrendingUp, Award, QrCode, Download, ExternalLink,
 } from 'lucide-react';
 
 function formatDate(iso: string | null) {
@@ -51,8 +51,189 @@ interface SalesSummary {
   topItems: { id: string; name: string; totalQty: number; totalRevenue: number }[];
 }
 
+// ─── QR Code Card ─────────────────────────────────────────────────────────────
+
+function QRCodeCard({ restaurantName }: { restaurantName: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [signedUrl, setSignedUrl] = useState('');
+  const [qrReady, setQrReady] = useState(false);
+  const [copying, setCopying] = useState(false);
+
+  const drawQR = useCallback(async (url: string, canvas: HTMLCanvasElement, size: number) => {
+    const QRCode = (await import('qrcode')).default;
+    await QRCode.toCanvas(canvas, url, {
+      width: size,
+      margin: 2,
+      color: { dark: '#1c1611', light: '#fdfaf5' },
+      errorCorrectionLevel: 'H',
+    });
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/dashboard/signed-menu-url')
+      .then((r) => r.json())
+      .then(async (data) => {
+        if (!data.signedUrl) return;
+        setSignedUrl(data.signedUrl);
+        if (canvasRef.current) {
+          await drawQR(data.signedUrl, canvasRef.current, 220);
+          setQrReady(true);
+        }
+      })
+      .catch(() => {});
+  }, [drawQR]);
+
+  async function handleDownloadHD() {
+    if (!signedUrl) return;
+    // Create a large offscreen canvas (1200×1200) with QR + labels
+    const SIZE = 1200;
+    const QR_SIZE = 900;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = SIZE;
+    offscreen.height = SIZE;
+    const ctx = offscreen.getContext('2d')!;
+
+    // Background
+    ctx.fillStyle = '#fdfaf5';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // Draw QR into a temp canvas then copy
+    const tempCanvas = document.createElement('canvas');
+    await drawQR(signedUrl, tempCanvas, QR_SIZE);
+    const qrX = (SIZE - QR_SIZE) / 2;
+    const qrY = 100;
+    ctx.drawImage(tempCanvas, qrX, qrY);
+
+    // Restaurant name
+    ctx.fillStyle = '#1c1611';
+    ctx.font = 'bold 56px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(restaurantName, SIZE / 2, qrY + QR_SIZE + 80);
+
+    // Subtitle
+    ctx.fillStyle = '#9c8e7a';
+    ctx.font = '36px sans-serif';
+    ctx.fillText('Scan to view our menu', SIZE / 2, qrY + QR_SIZE + 140);
+
+    // Powered-by
+    ctx.fillStyle = '#c8622a';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('Powered by MenuQR', SIZE / 2, SIZE - 48);
+
+    // Download
+    const link = document.createElement('a');
+    link.download = `${restaurantName.replace(/\s+/g, '_')}_QR.png`;
+    link.href = offscreen.toDataURL('image/png');
+    link.click();
+  }
+
+  async function handleCopyLink() {
+    if (!signedUrl) return;
+    setCopying(true);
+    try {
+      await navigator.clipboard.writeText(signedUrl);
+    } finally {
+      setTimeout(() => setCopying(false), 1800);
+    }
+  }
+
+  return (
+    <div className="db-card" style={{ padding: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+        <QrCode size={18} style={{ color: 'var(--db-accent)' }} />
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--db-text)' }}>Your Menu QR Code</h2>
+      </div>
+
+      <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        {/* QR canvas */}
+        <div style={{
+          flexShrink: 0, background: '#fdfaf5', borderRadius: 16,
+          border: '1.5px solid var(--db-border)', padding: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 244, height: 244,
+        }}>
+          {!qrReady && !signedUrl && (
+            <div style={{ textAlign: 'center', color: 'var(--db-text-muted)', fontSize: '0.82rem' }}>
+              <QrCode size={40} style={{ color: 'var(--db-border)', marginBottom: 8 }} />
+              <p>No QR bound yet</p>
+              <p style={{ fontSize: '0.72rem', marginTop: 4 }}>Go to Setup → Bind QR</p>
+            </div>
+          )}
+          <canvas ref={canvasRef} style={{ display: qrReady ? 'block' : 'none', borderRadius: 8, width: 220, height: 220 }} />
+        </div>
+
+        {/* Info & actions */}
+        <div style={{ flex: 1, minWidth: 180, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <p style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--db-text-muted)', marginBottom: 4 }}>Menu URL</p>
+            <p style={{ fontSize: '0.78rem', color: 'var(--db-text-2)', wordBreak: 'break-all', lineHeight: 1.5 }}>
+              {signedUrl || 'Not available — bind a QR code first'}
+            </p>
+          </div>
+
+          {signedUrl && (
+            <>
+              <a
+                href={signedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: '0.82rem', fontWeight: 600, color: 'var(--db-accent)',
+                  textDecoration: 'none',
+                }}
+              >
+                <ExternalLink size={13} /> Preview menu
+              </a>
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+                <button
+                  onClick={handleCopyLink}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, height: 38,
+                    padding: '0 16px', borderRadius: 10,
+                    background: copying ? '#f0fdf4' : 'var(--db-surface-2)',
+                    border: `1.5px solid ${copying ? '#bbf7d0' : 'var(--db-border)'}`,
+                    color: copying ? '#16a34a' : 'var(--db-text-2)',
+                    fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                    transition: 'all 0.18s',
+                  }}
+                >
+                  {copying ? '✓ Copied!' : 'Copy Link'}
+                </button>
+
+                <button
+                  onClick={handleDownloadHD}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, height: 38,
+                    padding: '0 16px', borderRadius: 10,
+                    background: 'var(--db-accent)', border: 'none',
+                    color: '#fff', fontSize: '0.82rem', fontWeight: 600,
+                    cursor: 'pointer', transition: 'opacity 0.18s',
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.opacity = '0.88')}
+                  onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+                >
+                  <Download size={14} /> Download HD PNG
+                </button>
+              </div>
+
+              <p style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)', lineHeight: 1.4 }}>
+                HD download is 1200×1200 px — print-ready quality.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function DashboardHomePage() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [salesSummary, setSalesSummary] = useState<SalesSummary | null>(null);
@@ -133,6 +314,9 @@ export default function DashboardHomePage() {
               </div>
             </div>
           </div>
+
+          {/* QR Code card */}
+          <QRCodeCard restaurantName={restaurant.name} />
 
           {/* Quick stats */}
           <div className="db-stats-grid">

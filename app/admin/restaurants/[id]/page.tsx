@@ -7,7 +7,7 @@ import { Input, Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
 import { formatDate, daysRemaining } from '@/lib/utils';
-import { ArrowLeft, Save, ToggleLeft, ToggleRight, Camera, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, ToggleLeft, ToggleRight, Camera, Trash2, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -42,6 +42,10 @@ function RestaurantDetailContent({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [credSaving, setCredSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [credForm, setCredForm] = useState({ email: '', password: '' });
+  const [credError, setCredError] = useState('');
   const router = useRouter();
   const [form, setForm] = useState({
     plan: 'monthly',
@@ -98,6 +102,37 @@ function RestaurantDetailContent({ id }: { id: string }) {
       toastError('Failed to save changes');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUpdateCredentials() {
+    if (!restaurant) return;
+    setCredError('');
+    if (!credForm.email && !credForm.password) {
+      setCredError('Enter a new email or password (or both).');
+      return;
+    }
+    if (credForm.password && credForm.password.length < 6) {
+      setCredError('Password must be at least 6 characters.');
+      return;
+    }
+    setCredSaving(true);
+    try {
+      const body: Record<string, string> = {};
+      if (credForm.email.trim()) body.new_email = credForm.email.trim();
+      if (credForm.password) body.new_password = credForm.password;
+      const res = await fetch(`/api/admin/restaurant/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+      success('Credentials updated! Notify the restaurant owner.');
+      setCredForm({ email: '', password: '' });
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Failed to update credentials');
+    } finally {
+      setCredSaving(false);
     }
   }
 
@@ -303,24 +338,86 @@ function RestaurantDetailContent({ id }: { id: string }) {
               </Button>
             </div>
           </div>
+        </div>
 
-          {/* Danger Zone */}
-          <div className="mt-2 p-4 rounded-xl border border-red-500/30 bg-red-900/10">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-red-400">Delete Restaurant</p>
-                <p className="text-xs text-red-400/70 mt-0.5">Permanently removes this restaurant and all its data. Cannot be undone.</p>
-              </div>
-              <Button
-                variant="danger"
-                size="sm"
-                leftIcon={<Trash2 size={14} />}
-                loading={deleting}
-                onClick={handleDelete}
-              >
-                Delete
-              </Button>
+        {/* Login Credentials */}
+        <div className="lg:col-span-2 glass rounded-2xl p-6 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <KeyRound size={17} className="text-amber-400" />
+            <h2 className="text-lg font-semibold text-white">Login Credentials</h2>
+          </div>
+
+          {/* Warning banner */}
+          <div className="p-3 rounded-xl bg-amber-900/20 border border-amber-500/30 text-xs text-amber-300">
+            ⚠️ Changing the credentials will update the restaurant owner's login. Make sure to notify them of the change.
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {/* New Email */}
+            <div>
+              <label className="block text-xs text-purple-400 font-medium mb-1.5">New Email (leave blank to keep current)</label>
+              <input
+                type="email"
+                placeholder="new@email.com"
+                value={credForm.email}
+                onChange={(e) => setCredForm({ ...credForm, email: e.target.value })}
+                className="w-full h-10 px-3 rounded-lg bg-purple-900/20 border border-purple-700/30 text-white text-sm placeholder-purple-600 focus:outline-none focus:border-purple-500 transition-colors"
+              />
             </div>
+
+            {/* New Password */}
+            <div>
+              <label className="block text-xs text-purple-400 font-medium mb-1.5">New Password (leave blank to keep current)</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Min 6 characters"
+                  value={credForm.password}
+                  onChange={(e) => setCredForm({ ...credForm, password: e.target.value })}
+                  className="w-full h-10 px-3 pr-10 rounded-lg bg-purple-900/20 border border-purple-700/30 text-white text-sm placeholder-purple-600 focus:outline-none focus:border-purple-500 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-500 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {credError && (
+            <p className="text-xs text-red-400 font-medium">{credError}</p>
+          )}
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleUpdateCredentials}
+              loading={credSaving}
+              leftIcon={<KeyRound size={15} />}
+            >
+              Update Credentials
+            </Button>
+          </div>
+        </div>
+
+        {/* Danger Zone — span full width */}
+        <div className="lg:col-span-3 p-4 rounded-xl border border-red-500/30 bg-red-900/10">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-red-400">Delete Restaurant</p>
+              <p className="text-xs text-red-400/70 mt-0.5">Permanently removes this restaurant and all its data. Cannot be undone.</p>
+            </div>
+            <Button
+              variant="danger"
+              size="sm"
+              leftIcon={<Trash2 size={14} />}
+              loading={deleting}
+              onClick={handleDelete}
+            >
+              Delete
+            </Button>
           </div>
         </div>
       </div>

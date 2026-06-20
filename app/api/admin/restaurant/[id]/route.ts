@@ -71,14 +71,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// POST /api/admin/restaurant/[id] — update plan/status/ai_import_limit/billing_enabled
+// POST /api/admin/restaurant/[id] — update plan/status/ai_import_limit/billing_enabled/credentials
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await verifyAdmin();
     const { id } = await params;
-    const body = await request.json() as { plan?: string; plan_expires_at?: string; is_active?: boolean; ai_import_limit?: number; billing_enabled?: boolean };
+    const body = await request.json() as {
+      plan?: string;
+      plan_expires_at?: string;
+      is_active?: boolean;
+      ai_import_limit?: number;
+      billing_enabled?: boolean;
+      new_email?: string;
+      new_password?: string;
+    };
 
     const adminDb = getAdminDb();
+    const adminAuth = getAdminAuth();
+
+    // ── Firestore fields update ────────────────────────────────────────────
     const update: Record<string, unknown> = {};
     if (body.plan) update.plan = body.plan;
     if (body.plan_expires_at) update.plan_expires_at = new Date(body.plan_expires_at);
@@ -88,7 +99,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (typeof body.billing_enabled === 'boolean') update.billing_enabled = body.billing_enabled;
 
-    await adminDb.collection('restaurants').doc(id).update(update);
+    if (Object.keys(update).length > 0) {
+      await adminDb.collection('restaurants').doc(id).update(update);
+    }
+
+    // ── Firebase Auth credential update ───────────────────────────────────
+    const hasEmail = body.new_email && body.new_email.trim() !== '';
+    const hasPassword = body.new_password && body.new_password.length >= 6;
+
+    if (hasEmail || hasPassword) {
+      // Fetch the restaurant's Firebase Auth UID from Firestore
+      const restSnap = await adminDb.collection('restaurants').doc(id).get();
+      if (!restSnap.exists) return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+      const uid = restSnap.data()!.uid as string;
+
+      const authUpdate: { email?: string; password?: string } = {};
+      if (hasEmail) authUpdate.email = body.new_email!.trim();
+      if (hasPassword) authUpdate.password = body.new_password;
+
+      await adminAuth.updateUser(uid, authUpdate);
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error' }, { status: 500 });
