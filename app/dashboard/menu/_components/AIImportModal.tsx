@@ -115,7 +115,8 @@ export function AIImportModal({ isOpen, onClose, onSuccess, restaurantId, catego
         seen.add(key); return true;
       });
 
-      // Descriptions are generated inline by the vision model — no post-extraction loop needed.
+      // Descriptions are written by the vision model in the same extraction pass.
+      // No secondary API loop needed.
       await fetch('/api/dashboard/ai-import-count', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ restaurantId }),
