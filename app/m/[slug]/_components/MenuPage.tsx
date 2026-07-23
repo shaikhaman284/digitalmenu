@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
@@ -164,7 +164,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
       .then((data: { liked: Record<string, boolean> }) => {
         const liked = new Set<string>(Object.entries(data.liked ?? {}).filter(([, v]) => v).map(([k]) => k));
         setLikedIds(liked);
-      }).catch(() => {});
+      }).catch(() => { });
   }, [visitorToken, restaurant.id]);
 
   const handleLike = useCallback(async (item: MenuItem, e?: React.MouseEvent) => {
@@ -238,7 +238,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
     fetch(`/api/public/review?restaurantId=${restaurant.id}&itemId=${selectedItem.id}`)
       .then((r) => r.json())
       .then((data) => setModalReviews(data.reviews || []))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setModalReviewsLoading(false));
   }, [selectedItem?.id, restaurant.id]);
 
@@ -474,7 +474,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                       {modalItem.review_count > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <div style={{ display: 'flex', gap: 2 }}>
-                            {[1,2,3,4,5].map((s) => <Star key={s} size={13} style={{ fill: s <= Math.round(modalItem.avg_rating || 0) ? '#d4a853' : 'none', color: s <= Math.round(modalItem.avg_rating || 0) ? '#d4a853' : '#ccc' }} />)}
+                            {[1, 2, 3, 4, 5].map((s) => <Star key={s} size={13} style={{ fill: s <= Math.round(modalItem.avg_rating || 0) ? '#d4a853' : 'none', color: s <= Math.round(modalItem.avg_rating || 0) ? '#d4a853' : '#ccc' }} />)}
                           </div>
                           <span style={{ fontSize: '0.83rem', fontWeight: 600, color: '#d4a853' }}>{modalItem.avg_rating?.toFixed(1)}</span>
                           <span style={{ fontSize: '0.78rem', color: '#9c8e7a' }}>({modalItem.review_count})</span>
@@ -502,7 +502,7 @@ export function MenuPage({ restaurant, categories, initialItems }: Props) {
                                 <div key={review.id} style={{ borderBottom: '1px solid #f0ebe2', paddingBottom: 12 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                                     <div style={{ display: 'flex', gap: 2 }}>
-                                      {[1,2,3,4,5].map((s) => <Star key={s} size={11} style={{ fill: s <= review.rating ? '#d4a853' : 'none', color: s <= review.rating ? '#d4a853' : '#ccc' }} />)}
+                                      {[1, 2, 3, 4, 5].map((s) => <Star key={s} size={11} style={{ fill: s <= review.rating ? '#d4a853' : 'none', color: s <= review.rating ? '#d4a853' : '#ccc' }} />)}
                                     </div>
                                     <span style={{ fontSize: '0.68rem', color: '#9c8e7a' }}>
                                       {review.created_at ? new Date(review.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : ''}
