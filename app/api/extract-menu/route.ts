@@ -101,7 +101,8 @@ function normalizeItem(item: MenuItemExtracted): MenuItemExtracted | null {
   if (!name) return null;
 
   const category = String(item.category || 'General').trim();
-  const description = String(item.description || '').trim();
+  // Auto-fill if the model returned blank — use the name itself as a minimal description
+  const description = String(item.description || '').trim() || `${name} — a delicious ${category.toLowerCase()} dish`;
 
   // Normalize pricing — handle both new `pricing` object and old `price` field
   let pricing: PricingTiers = {};
@@ -155,8 +156,13 @@ async function extractWithGroq(imageBase64: string, strict = false): Promise<Men
   const lenientPrompt = `You extract menu items from restaurant menu images.
 Return ONLY a raw JSON array. Start with [, end with ]. No markdown, no code fences.
 
-Each item must be a JSON object:
-{"name":"dish name","category":"section heading","pricing":{...},"description":"one-line max 12 words"}
+Each item must be a JSON object with ALL four fields — name, category, pricing, AND description:
+{"name":"dish name","category":"section heading","pricing":{...},"description":"appetising one-liner, max 12 words"}
+
+!! DESCRIPTION IS MANDATORY for every single item !!
+  - If the menu photo shows a description → use it (shortened to one line).
+  - If NO description is printed → INVENT one short appetising line based on the dish name.
+  - NEVER return an empty "description" field. NEVER omit it.
 
 PRICING KEY RULES — choose the right key for every price:
   "full"   → single plate / full-size price for curries, rice, sandwiches, soups, starters, etc.
@@ -205,7 +211,14 @@ Extract every item from the menu image.
 
 Return ONLY a raw JSON array. Start with [. End with ]. No markdown.
 
-Each element: {"name":"...","category":"...","pricing":{...},"description":"..."}
+Each element must have ALL four fields:
+{"name":"...","category":"...","pricing":{...},"description":"appetising one-liner max 12 words"}
+
+!! DESCRIPTION RULE — ABSOLUTE !!
+  Every item MUST have a non-empty description.
+  If the photo shows a description → include it (one line).
+  If no description is printed → write one short appetising sentence based on the dish name.
+  Returning an empty or missing description field is a CRITICAL ERROR.
 
 HOW TO BUILD THE PRICING OBJECT:
 
@@ -262,7 +275,7 @@ Now extract ALL items from the image. Be precise. Do not skip any item.`;
 
   const prompt = strict ? strictPrompt : lenientPrompt;
   const response = await groq.chat.completions.create({
-    model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    model: 'qwen/qwen3.6-27b',
     messages: [
       {
         role: 'user',
