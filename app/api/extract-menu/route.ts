@@ -35,9 +35,20 @@ function basePriceFromTiers(pricing: PricingTiers): number {
  *  - Extra prose before/after the JSON
  *  - Nested bracket issues (uses depth counting)
  */
+/**
+ * Strip Qwen / other thinking-model <think>...</think> blocks.
+ * Uses a greedy regex so nested or malformed tags are also removed.
+ */
+function stripThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
 function extractJsonArray(raw: string): MenuItemExtracted[] {
-  // 1. Strip markdown fences
-  let text = raw
+  // 1. Strip <think>...</think> blocks (Qwen thinking model output)
+  let text = stripThinkTags(raw);
+
+  // 2. Strip markdown fences
+  text = text
     .replace(/```json\s*/gi, '')
     .replace(/```\s*/gi, '')
     .trim();
@@ -149,8 +160,60 @@ function normalizeItem(item: MenuItemExtracted): MenuItemExtracted | null {
   return { name, category, price, pricing, description };
 }
 
+/**
+ * Downscale a base64 data-URI image so its longest side is ≤ maxPx.
+ * Qwen tiles images into a grid; each tile costs input tokens.
+ * A 2048-px image → 4 tiles → 4× the token cost → 429 on first try.
+ * Keeping the longest side ≤ 1024 px keeps it to a single tile.
+ *
+ * Uses the `sharp` package when available (Node.js server-side).
+ * Falls back to returning the original image unchanged if sharp is absent.
+ */
+async function downscaleImage(dataUri: string, maxPx = 1024): Promise<string> {
+  try {
+    // Dynamically import sharp so the route still works if it isn't installed
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sharp = (await import('sharp')).default;
+
+    // Extract mime type and raw base64
+    const match = dataUri.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+    if (!match) return dataUri;
+    const mimeType = match[1];
+    const base64Data = match[2];
+    const inputBuffer = Buffer.from(base64Data, 'base64');
+
+    // Check actual dimensions first
+    const meta = await sharp(inputBuffer).metadata();
+    const { width = 0, height = 0 } = meta;
+
+    if (width <= maxPx && height <= maxPx) {
+      // Already within limits — return as-is
+      return dataUri;
+    }
+
+    // Resize keeping aspect ratio; output as JPEG for consistent token cost
+    const outputBuffer = await sharp(inputBuffer)
+      .resize({ width: maxPx, height: maxPx, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+
+    const outBase64 = outputBuffer.toString('base64');
+    console.log(
+      `[extract-menu] Downscaled image from ${width}×${height} to ≤${maxPx}px ` +
+      `(${Math.round(inputBuffer.length / 1024)}KB → ${Math.round(outputBuffer.length / 1024)}KB)`
+    );
+    return `data:image/jpeg;base64,${outBase64}`;
+  } catch (err) {
+    console.warn('[extract-menu] Image downscale skipped (sharp not available or error):', err);
+    return dataUri;
+  }
+}
+
 async function extractWithGroq(imageBase64: string, strict = false): Promise<MenuItemExtracted[]> {
   const groq = getGroqClient();
+
+  // Pre-process: downscale to ≤ 1024px to avoid Qwen grid-tiling 429 errors
+  const processedImage = await downscaleImage(imageBase64, 1024);
 
   // ─── FIRST ATTEMPT: focused, example-heavy prompt ────────────────────────
   const lenientPrompt = `You extract menu items from restaurant menu images.
@@ -274,19 +337,33 @@ EXAMPLES:
 Now extract ALL items from the image. Be precise. Do not skip any item.`;
 
   const prompt = strict ? strictPrompt : lenientPrompt;
+
+  // ─── Qwen thinking-model fixes ──────────────────────────────────────────
+  // 1. System message starts with /no_think → disables the <think> chain.
+  // 2. max_completion_tokens (not max_tokens) → correct param for this API.
+  // 3. NO response_format → Qwen returns 400 json_validate_failed with it
+  //    because Groq validates before stripping <think> tags.
+  // 4. We strip any remaining <think> blocks manually in extractJsonArray.
   const response = await groq.chat.completions.create({
     model: 'qwen/qwen3.6-27b',
     messages: [
       {
+        role: 'system',
+        content:
+          '/no_think\n' +
+          'You are a precise menu extraction assistant. ' +
+          'Respond with ONLY valid JSON — no markdown, no explanations, no code fences.',
+      },
+      {
         role: 'user',
         content: [
           { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageBase64 } },
+          { type: 'image_url', image_url: { url: processedImage } },
         ],
       },
     ],
-    max_tokens: 8192,
-    temperature: 0.0, // deterministic for parsing reliability
+    max_completion_tokens: 4096,
+    temperature: 0.1, // slight warmth; 0.0 can cause repetition loops on some models
   });
 
   const content = response.choices[0]?.message?.content || '';
