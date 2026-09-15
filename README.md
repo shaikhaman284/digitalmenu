@@ -1,5 +1,32 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## AI Models Configuration
+
+This application uses Groq API for both vision and text AI tasks:
+
+### Vision Model (Menu Extraction)
+- **Provider**: Groq
+- **Model**: `qwen/qwen3.8-27b`
+- **Purpose**: Extracts menu items from uploaded images
+- **API Endpoint**: `/app/api/extract-menu/route.ts`
+- **Context Window**: 131K tokens
+- **Image Support**: Up to 3 images per request, 20MB max size
+
+### Text Model (Description Generation)
+- **Provider**: Groq
+- **Model**: `openai/gpt-oss-120b`
+- **Purpose**: Generates appetizing descriptions for menu items
+- **API Endpoint**: `/app/api/generate-description/route.ts`
+- **Context Window**: 200K tokens
+
+### Setup Instructions
+
+1. Get a Groq API key from [console.groq.com](https://console.groq.com/keys)
+2. Add the key to your `.env.local` file:
+   ```env
+   GROQ_API_KEY=your_groq_api_key_here
+   ```
+
 ## Getting Started
 
 First, run the development server:

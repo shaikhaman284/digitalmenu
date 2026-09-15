@@ -159,13 +159,33 @@ export function AddItemModal({ isOpen, onClose, onSuccess, restaurantId, categor
     if (!form.name || (!form.category && !newCategory)) { toastError('Enter name and category first'); return; }
     setGeneratingDesc(true);
     try {
+      const categoryValue = form.isNewCategory ? newCategory : form.category;
+      console.log('[AddItemModal] Calling generate-description with:', { name: form.name, category: categoryValue });
+      
       const res = await fetch('/api/generate-description', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name, category: form.isNewCategory ? newCategory : form.category }),
+        body: JSON.stringify({ name: form.name, category: categoryValue }),
       });
+      
+      console.log('[AddItemModal] Response status:', res.status);
       const data = await res.json();
-      if (data.description) { setForm((f) => ({ ...f, description: data.description })); success('Description generated!'); }
-    } catch { toastError('Failed to generate description'); }
+      console.log('[AddItemModal] Response data:', data);
+      
+      if (!res.ok) {
+        toastError(data.error || 'Failed to generate description');
+        return;
+      }
+      
+      if (data.description) { 
+        setForm((f) => ({ ...f, description: data.description })); 
+        success('Description generated!'); 
+      } else {
+        toastError('No description returned from AI');
+      }
+    } catch (err) { 
+      console.error('[AddItemModal] Error:', err);
+      toastError('Failed to generate description'); 
+    }
     finally { setGeneratingDesc(false); }
   }
 

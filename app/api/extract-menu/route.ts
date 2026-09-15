@@ -338,14 +338,14 @@ Now extract ALL items from the image. Be precise. Do not skip any item.`;
 
   const prompt = strict ? strictPrompt : lenientPrompt;
 
-  // ─── Qwen thinking-model fixes ──────────────────────────────────────────
+  // ─── Qwen vision model configuration ──────────────────────────────────────────
   // 1. System message starts with /no_think → disables the <think> chain.
   // 2. max_completion_tokens (not max_tokens) → correct param for this API.
   // 3. NO response_format → Qwen returns 400 json_validate_failed with it
   //    because Groq validates before stripping <think> tags.
   // 4. We strip any remaining <think> blocks manually in extractJsonArray.
   const response = await groq.chat.completions.create({
-    model: 'qwen/qwen3.6-27b',
+    model: 'qwen/qwen3.8-27b',
     messages: [
       {
         role: 'system',

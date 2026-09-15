@@ -18,20 +18,21 @@ export async function POST(request: NextRequest) {
     const groq = getGroqClient();
 
     const response = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: 'qwen/qwen3.8-27b',
       messages: [
         {
           role: 'user',
           content: `Generate a single appetizing one-line description (max 15 words) for a menu item called '${name}' in the '${category}' category. Return only the description, nothing else.`,
         },
       ],
-      max_tokens: 60,
-      temperature: 0.7,
+      max_completion_tokens: 100,
+      temperature: 0.6,
+     // include_reasoning: false, // Turn off reasoning/thinking, return only final answer
     });
 
     const description = (response.choices[0]?.message?.content || '').trim()
-      .replace(/^["']|["']$/g, '') // strip surrounding quotes if any
-      .split('.')[0] // take only the first sentence
+      .replace(/^["']|["']$/g, '') // strip surrounding quotes
+      .split('.')[0] // take only first sentence
       .trim();
 
     return NextResponse.json({ description });
