@@ -14,10 +14,10 @@ This application uses Groq API for both vision and text AI tasks:
 
 ### Text Model (Description Generation)
 - **Provider**: Groq
-- **Model**: `openai/gpt-oss-120b`
+- **Model**: `qwen/qwen3.8-27b`
 - **Purpose**: Generates appetizing descriptions for menu items
 - **API Endpoint**: `/app/api/generate-description/route.ts`
-- **Context Window**: 200K tokens
+- **Context Window**: 131K tokens
 
 ### Setup Instructions
 

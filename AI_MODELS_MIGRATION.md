@@ -1,7 +1,7 @@
 # AI Models Migration Guide
 
 ## Overview
-This document describes the migration of AI models in the Digital Menu application to use the latest Groq models: `qwen/qwen3.8-27b` for vision tasks and `openai/gpt-oss-120b` for text generation.
+This document describes the migration of AI models in the Digital Menu application to use the latest Groq models: `qwen/qwen3.8-27b` for vision tasks and `qwen/qwen3.8-27b` for text generation.
 
 ## Changes Made
 
@@ -33,15 +33,15 @@ This document describes the migration of AI models in the Digital Menu applicati
 **File**: `app/api/generate-description/route.ts`
 
 **Previous Model**: `llama-3.3-70b-versatile`  
-**New Model**: `openai/gpt-oss-120b`
+**New Model**: `qwen/qwen3.8-27b`
 
 **Purpose**: Generates appetizing one-line descriptions for menu items based on their name and category.
 
-**Provider**: Groq API (not OpenAI directly)  
+**Provider**: Groq API  
 **Configuration**: Uses same `GROQ_API_KEY` environment variable
 
 **Model Specifications**:
-- Context Window: 200K tokens
+- Context Window: 131K tokens
 - High-quality text generation
 - Fast inference on Groq infrastructure
 - Cost-effective for production use
@@ -105,13 +105,13 @@ No new dependencies required - the existing `groq-sdk` package handles both mode
 
 ### `/api/generate-description` (POST)
 - **Purpose**: Generate description for a menu item
-- **Model Used**: `openai/gpt-oss-120b` via Groq
+- **Model Used**: `qwen/qwen3.8-27b` via Groq
 - **Input**: Item name and category
 - **Output**: Single-line appetizing description (max 15 words)
 
 ## Model Specifications
 
-### Qwen3.8-27B (Vision)
+### Qwen3.8-27B (Vision & Text)
 - **Type**: Multimodal vision-language model
 - **Parameters**: 27 billion
 - **Context Window**: 131K tokens
@@ -123,19 +123,8 @@ No new dependencies required - the existing `groq-sdk` package handles both mode
   - Thinking and instruct modes
   - Tool use support
   - JSON mode for structured output
-  - Cost-effective for vision tasks
+  - Fast and cost-effective for both vision and text tasks
 - **Token Optimization**: Images are automatically downscaled to ≤1024px to minimize token usage
-
-### OpenAI GPT-OSS-120B (Text)
-- **Type**: Large language model (text-only)
-- **Parameters**: 120 billion
-- **Context Window**: 200K tokens
-- **Provider**: Available via Groq (not OpenAI directly)
-- **Strengths**:
-  - High-quality creative text generation
-  - Consistent output format
-  - Fast inference on Groq infrastructure
-  - Cost-effective for text tasks
 
 ## Cost Considerations
 
@@ -154,8 +143,8 @@ No new dependencies required - the existing `groq-sdk` package handles both mode
 ### "The model does not exist or you do not have access to it"
 **Solution**: 
 1. Verify your Groq API key is valid
-2. Check that you have access to the models in your Groq account
-3. Ensure you're using the correct model names: `qwen/qwen3.8-27b` and `openai/gpt-oss-120b`
+2. Check that you have access to the model in your Groq account
+3. Ensure you're using the correct model name: `qwen/qwen3.8-27b`
 
 ### Build Errors
 **Solution**: Run `npm install` to ensure all packages are properly installed.
@@ -163,7 +152,7 @@ No new dependencies required - the existing `groq-sdk` package handles both mode
 ### Description Generation Returns Errors
 **Solution**: 
 1. Verify your Groq API key is valid
-2. Check that you have access to `openai/gpt-oss-120b` model
+2. Check that you have access to `qwen/qwen3.8-27b` model
 3. Ensure the `GROQ_API_KEY` is set correctly in `.env.local`
 
 ## Testing
@@ -179,7 +168,7 @@ No new dependencies required - the existing `groq-sdk` package handles both mode
 2. Click "Add Item" button
 3. Enter item name and category
 4. Click "Generate Description" button
-5. Verify a description is generated using `openai/gpt-oss-120b`
+5. Verify a description is generated using `qwen/qwen3.8-27b`
 
 ## Rollback Instructions
 
@@ -189,7 +178,7 @@ If you need to revert to the previous setup:
    - Change model from `qwen/qwen3.8-27b` back to `qwen/qwen3.6-27b`
 
 2. **Update `app/api/generate-description/route.ts`**
-   - Change model from `openai/gpt-oss-120b` to `llama-3.3-70b-versatile`
+   - Change model from `qwen/qwen3.8-27b` to `llama-3.3-70b-versatile`
 
 ## Support
 
@@ -200,5 +189,5 @@ For issues or questions:
 
 ## Version History
 
-- **v2.0.0** (Current) - Migrated to Qwen3.8-27B for vision, OpenAI GPT-OSS-120B for text (both via Groq)
+- **v2.0.0** (Current) - Migrated to Qwen3.8-27B for vision and text tasks via Groq
 - **v1.0.0** - Original implementation with Qwen3.6-27B and Llama-3.3-70B
